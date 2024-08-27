@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 import matplotlib
 matplotlib.use('TkAgg')
+import getopt
 
 class TholonicStrategy:
     def __init__(self, trading_pair, negotiation_threshold, limitation_multiplier,
@@ -185,12 +186,11 @@ class ProfitLossPlotter:
             self.cumulative_profits.append(self.cumulative_profits[-1] + profit)
 
     def plot(self, initial_balance=1000):
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
-        # print(self.timestamps)
-        # exit()
-        dates = self.timestamps
+        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(12, 15), sharex=True)
+
         # Convert timestamps to datetime objects
         # dates = [datetime.strptime(ts, "%Y-%m-%d %H:%M:%S") for ts in self.timestamps]
+        dates = self.timestamps
 
         # Plot individual trade profits/losses
         ax1.bar(dates, self.profits, color=['g' if p > 0 else 'r' for p in self.profits])
@@ -207,17 +207,39 @@ class ProfitLossPlotter:
         ax2.plot(dates, buy_and_hold_values, color='r', label='Buy and Hold')
 
         ax2.set_title('Cumulative Profit vs Buy and Hold')
-        ax2.set_xlabel('Time')
         ax2.set_ylabel('Profit')
         ax2.legend()
 
+        # Plot closing prices
+        ax3.plot(dates, self.prices, color='g')
+        ax3.set_title('Asset Closing Prices')
+        ax3.set_xlabel('Time')
+        ax3.set_ylabel('Price')
+
         # Format x-axis to show dates nicely
-        ax2.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-        ax2.xaxis.set_major_locator(mdates.AutoDateLocator())
+        ax3.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+        ax3.xaxis.set_major_locator(mdates.AutoDateLocator())
 
         plt.gcf().autofmt_xdate()  # Rotate and align the tick labels
         plt.tight_layout()
         plt.show()
+
+
+def print_usage():
+    print("Usage: python trading_strategy_tool.py [options]")
+    print("Options:")
+    print("  -h, --help                    Show this help message and exit")
+    print("  -p, --pair=PAIR               Trading pair (e.g., BTCUSD)")
+    print("  -b, --backtest                Run in backtest mode (default is live mode)")
+    print("  -m, --max-positions=MAX       Maximum number of positions")
+    print("  -n, --negotiation=THRESHOLD   Negotiation threshold")
+    print("  -l, --limitation=MULTIPLIER   Limitation multiplier")
+    print("  -c, --contribution=THRESHOLD  Contribution threshold")
+    print("  -k, --lookback=PERIOD         Lookback period")
+    print("  -r, --commission=RATE         Commission rate")
+    print("  -s, --stop-loss=PERCENTAGE    Stop loss percentage")
+    print("  -i, --initial-balance=BALANCE Initial balance for buy-and-hold comparison")
+
 
 def main(trading_pair, backtest, **kwargs):
 
@@ -229,6 +251,55 @@ def main(trading_pair, backtest, **kwargs):
     commission_rate = kwargs.get('commission_rate', 0.001)  # Default 0.1% commission
     stop_loss_percentage = kwargs.get('stop_loss_percentage', 0.05)  # 5% stop loss
     initial_balance = kwargs.get('initial_balance', 1000)  # Initial balance for buy-and-hold calculation
+
+
+def main(argv):
+    trading_pair = "BTCUSD"
+    backtest = True
+    max_positions = 2
+    negotiation_threshold = 1.0
+    limitation_multiplier = 1.5
+    contribution_threshold = 1.2
+    lookback_period = 20
+    commission_rate = 0.001 # 0.1%
+    stop_loss_percentage = 0.05 # 5%
+    initial_balance = 1000
+
+    try:
+        opts, args = getopt.getopt(argv, "hp:bm:n:l:c:k:r:s:i:",
+                                   ["help", "pair=", "backtest", "max-positions=", "negotiation=",
+                                    "limitation=", "contribution=", "lookback=", "commission=",
+                                    "stop-loss=", "initial-balance="])
+    except getopt.GetoptError:
+        print_usage()
+        sys.exit(2)
+
+    for opt, arg in opts:
+        if opt in ("-h", "--help"):
+            print_usage()
+            sys.exit()
+        elif opt in ("-p", "--pair"):
+            trading_pair = arg
+        elif opt in ("-b", "--backtest"):
+            backtest = True
+        elif opt in ("-m", "--max-positions"):
+            max_positions = int(arg)
+        elif opt in ("-n", "--negotiation"):
+            negotiation_threshold = float(arg)
+        elif opt in ("-l", "--limitation"):
+            limitation_multiplier = float(arg)
+        elif opt in ("-c", "--contribution"):
+            contribution_threshold = float(arg)
+        elif opt in ("-k", "--lookback"):
+            lookback_period = int(arg)
+        elif opt in ("-r", "--commission"):
+            commission_rate = float(arg)
+        elif opt in ("-s", "--stop-loss"):
+            stop_loss_percentage = float(arg)
+        elif opt in ("-i", "--initial-balance"):
+            initial_balance = float(arg)
+
+
 
     backtest_idx_iter = 0
     previous_time = ""
@@ -346,6 +417,7 @@ def main(trading_pair, backtest, **kwargs):
                 # Add current price to plotter for buy-and-hold comparison
                 plotter.add_trade(current_time, 0, current_price)
 
+
             time.sleep(0.0)  # Wait before next update
         except KeyboardInterrupt:
             print("Strategy stopped by user.")
@@ -375,27 +447,28 @@ def main(trading_pair, backtest, **kwargs):
     plotter.plot(initial_balance)
 
 if __name__ == "__main__":
+    main(sys.argv[1:])
 
-    backtest = True
-    trading_pair = "BTCUSD"  # You can change this to any pair supported by the exchange
-    max_positions = 2
-    negotiation_threshold = 1.0
-    limitation_multiplier = 1.5
-    contribution_threshold = 1.2
-    lookback_period = 20
-    commission_rate = 0.001  # 0.1% commission
-    stop_loss_percentage = 0.05  # 5% stop loss
-    initial_balance = 1000  # Initial balance for buy-and-hold calculation
+    # backtest = True
+    # trading_pair = "BTCUSD"  # You can change this to any pair supported by the exchange
+    # max_positions = 2
+    # negotiation_threshold = 1.0
+    # limitation_multiplier = 1.5
+    # contribution_threshold = 1.2
+    # lookback_period = 20
+    # commission_rate = 0.001  # 0.1% commission
+    # stop_loss_percentage = 0.05  # 5% stop loss
+    # initial_balance = 1000  # Initial balance for buy-and-hold calculation
 
-    main(
-        trading_pair,
-        backtest,
-        max_positions=max_positions,
-        negotiation_threshold=negotiation_threshold,
-        limitation_multiplier=limitation_multiplier,
-        contribution_threshold=contribution_threshold,
-        lookback_period=lookback_period,
-        commission_rate=commission_rate,
-        stop_loss_percentage=stop_loss_percentage,
-        initial_balance=initial_balance
-    )
+    # main(
+    #     trading_pair,
+    #     backtest,
+    #     max_positions=max_positions,
+    #     negotiation_threshold=negotiation_threshold,
+    #     limitation_multiplier=limitation_multiplier,
+    #     contribution_threshold=contribution_threshold,
+    #     lookback_period=lookback_period,
+    #     commission_rate=commission_rate,
+    #     stop_loss_percentage=stop_loss_percentage,
+    #     initial_balance=initial_balance
+    # )
