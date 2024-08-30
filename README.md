@@ -4,6 +4,9 @@
 
 This Python program implements a versatile trading strategy tool that can function as both a backtester and a live trader. It focuses on cryptocurrency trading, allowing users to test strategies against historical data or execute trades in real-time using live market data from Kraken.
 
+
+[Example Output](./BEST-n0.5l0.3c1.4k15s0.05.png)
+
 ## Features
 
 - Custom trading strategy implementation (Tholonic Strategy)
