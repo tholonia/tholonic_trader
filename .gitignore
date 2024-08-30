@@ -1,0 +1,17 @@
+data/*
+img/*
+log/*
+ok/*
+pine/*
+sol/*
+x*
+archive/*
+~*
+RUN
+PUSH
+.deps/
+.directory
+OK
+RUN~
+__pycache__
+trade_bot_predataloader.py
