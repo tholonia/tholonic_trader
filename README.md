@@ -4,8 +4,10 @@
 
 This Python program implements a versatile trading strategy tool that can function as both a backtester and a live trader. It focuses on cryptocurrency trading, allowing users to test strategies against historical data or execute trades in real-time using live market data from Kraken.
 
+![Example Output](./BEST-n0.5l0.3c1.4k15s0.05.png)
+Hourly bars from 2024-07-27 to- 2024-08-27
+23.8% gain in a time when BTC dropped 6.86%, with 64.7% of alltrades being profitable.
 
-[Example Output](./BEST-n0.5l0.3c1.4k15s0.05.png)
 
 ## Features
 
