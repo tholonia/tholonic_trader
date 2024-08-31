@@ -95,7 +95,7 @@ python trade_bot.py -p BTCUSD -m 2 -n 1.0 -l 1.5 -c 1.2 -k 20 -r 0.001 -s 1 -i 1
 
 - In backtest mode, the program reads historical data from CSV files in the `data/` directory. The file should be named according to the trading pair and timeframe, e.g., `BTCUSD_OHLC_60.csv` for hourly data.
 - In live mode, it fetches real-time data from Kraken using the CCXT library.
-
+- images are saved in the `/img` folder.
 ## Visualization
 
 The program generates a plot with three subplots:
@@ -132,4 +132,78 @@ This updated README reflects the changes in the code, including:
 3. Changes in the visualization (removal of price delta plot, addition of volatility plot)
 4. More detailed examples of how to run the script
 5. Updated description of the verbosity levels, including the new level 101 for batch processing
+
+# Notes:
+
+Download the data:
+```sh
+# ETHUSD 1Hr from 2024-07-27 to 2024-08-26
+./get_data.py -c ETH -b USD -f 2024-07-27 -t 2024-08-26 -i 60
+```
+This file will automatically be saved inm the `./data` folder as `ETH_USD_OHLC_60_20240727_20240826.csv`
+
+Run the bot in backtest mode (default mode):
+```sh
+./trade_bot.py -v 3  -n 0.5 -l 0.3 -c 1.4 -k 15 -s 4.8 -m 1 -R "2024-07-27|2024-08-26" -F data/ETH_USD_OHLC_60_20240727_20240826.csv
+```
+Testing so far shows the following settings to be the best for:
+
+### 1hr OHLC data
+
+- Crypto (bluechips)
+  - flat zone
+    - -n 0.5 -l 0.3 -c 1.4 -k 15 -s 4.8
+  - Bearish
+    -
+  - Bullish
+    -
+
+Test runs:
+
+Legend of abbreviation that _might_ be used:
+
+- n = negotiation threshold
+- l = limitation multiplier
+- c = contribution threshold
+- k = lookback_period
+- TT = Total Trades
+- PT = Profitable Trades
+- PN = Non-Profitable Trades:
+- PR: Profit Ratio
+- IC = Initial Capital (1st buy)
+- FS = Final Selling Price
+- TP = Total Profit
+- BH = Buy-and-Hold Return
+- FC = Final Capital
+- TR = Total Return
+- TH = Total Units Held at End
+- CP = Compare P total profit % over buy and hold %
+- AV = Avg Volume
+
+
+
+Examples:
+
+```sh
+# Get the data from Kraken (XBT is what Kraken calls BTC).
+# This is saved automatically as `data/XBT_USDT_OHLC_60_20240727_20240827.csv`
+./get_data.py -c XBT -b USD -f 2024-07-27 -t 2024-08-27 -i 60
+# Process it. -v 101 shows on ly the final result, writes teh CSV file and plots the results to file only
+# Use -v 3 to see all the details and plots.
+# The n,l,c,k,s values are optimum for 1 hour charts
+# The '-p XBT_USDT' is optional and only for information on the output. If not specified, it will default to XBT_USD
+./trade_bot.py -p XBT_USDT  -v 101  -n 0.5 -l 0.3 -c 1.4 -k 15  -F data/XBT_USDT_OHLC_60_20240727_20240827.csv -s 4.8 -m 1 -R "2024-07-27|2024-08-27"
+
+
+./get_data.py -c SOL -b USD -f 2024-07-27 -t 2024-08-26 -i 60
+./trade_bot.py -v 101  -n 0.5 -l 0.3 -c 1.4 -k 15  -F data/ETH_USD_OHLC_60_20240727_20240826.csv -s 4.8 -m 1 -R "2024-07-27|2024-08-30"
+
+# The output, when using '-v 101' looks somethign like this:
+n:0.50l:0.30c:1.40k:15s:4.80|2024-07-27 00:00:00 - 2024-08-30 16:56:35|TT:   19|PN:   7/ 12|PR: 36.84%|TP: $  121.28 (  4.99%)|FC: $ 3326.28|TR: $  3.78%|FL: $ 3205.00/ 2743.81
+```
+
+
+```
+
+```
 

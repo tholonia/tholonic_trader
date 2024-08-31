@@ -98,6 +98,8 @@ class TholonicStrategy:
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df.set_index('timestamp', inplace=True)
         # report_time("TholonicStrategy::fetch_ohlcv",starttime,time.time())
+
+
         return df
 
     def update_data(self):
@@ -132,6 +134,19 @@ class TholonicStrategy:
 
     def run_strategy(self):
         self.update_data()
+        # for the moment, this is hard coded because the strategy does not work well with low voloume or low prices.
+        # At the time of this writing, on BTC, SOL, XDG, and ETH have cash columes over $5000/hr
+        if self.data['volume'].iloc[-1] * self.data['close'].iloc[-1] < 5000:
+            print(f"{self.trading_pair:10s}:Volume is too low: {int(self.data['volume'].iloc[-1]):8d} * {self.data['close'].iloc[-1]:8.2f} = {int(self.data['volume'].iloc[-1] * self.data['close'].iloc[-1]):8d}")
+            exit()
+
+        # if self.data['volume'].iloc[-1] > self.data['average_volume'].iloc[-1]:
+        #     self.data['volume_condition'] = True
+        # else:
+        #     self.data['volume_condition'] = False
+
+
+
         self.calculate_indicators()
         self.generate_signals()
         return self.data.iloc[-1]
@@ -281,7 +296,10 @@ class ProfitLossPlotter:
         self.volatilities.append(volatility)
         self.average_volatilities.append(average_volatility)
 
-    def plot(self, initial_balance,negotiation_threshold, limitation_multiplier, contribution_threshold, lookback_period,volatility,verbosity,stop_loss):
+    def plot(self, initial_balance,negotiation_threshold, limitation_multiplier,
+             contribution_threshold, lookback_period,volatility,verbosity,stop_loss,
+             ohlcfile,total_profit_percentage,buy_and_hold_return):
+
         fig, axes = plt.subplots(3, 1, figsize=(23, 13), sharex=True)
         ax1, ax2, ax4 = axes  # Unpack the axes array
 
@@ -291,7 +309,7 @@ class ProfitLossPlotter:
         #!———————————————————————————————————————————————————————————————————————————
         # Plot individual trade profits/losses
         ax1.bar(dates, self.profits, color=['g' if p > 0 else 'r' for p in self.profits])
-        ax1.set_title('Individual Trade Profits/Losses')
+        ax1.set_title('.')
         ax1.set_ylabel('Profit/Loss')
         ax1.axhline(y=0, color='k', linestyle='-', linewidth=0.5)
         #!———————————————————————————————————————————————————————————————————————————
@@ -336,6 +354,13 @@ class ProfitLossPlotter:
         plt.gcf().autofmt_xdate()  # Rotate and align the tick labels
         plt.subplots_adjust(left=0.1, right=0.95, bottom=0.1, top=0.95)
 
+        title = f"n{negotiation_threshold}l{limitation_multiplier}c{contribution_threshold}k{lookback_period}s{stop_loss}"
+        title += f" [{ohlcfile}]"
+        title += f" hold:{buy_and_hold_return:.2f}% net:{total_profit_percentage:.2f}% Δ{total_profit_percentage-buy_and_hold_return:.2f}%"
+
+        plt.suptitle(title, fontsize=16)
+
+
         # Format the date axis to show monthly labels and daily ticks without numbers
         for ax in axes:
             # Set major ticks and labels for each month
@@ -363,9 +388,12 @@ class ProfitLossPlotter:
         multi = MultiCursor(fig.canvas, (ax1, ax2, ax4), color='r', lw=1, horizOn=True, vertOn=True)
 
         # plot_name = f"n{negotiation_threshold}l{limitation_multiplier}c{contribution_threshold}k{lookback_period}v{volatility}s{stop_loss}.png"
-        plot_name = f"n{negotiation_threshold}l{limitation_multiplier}c{contribution_threshold}k{lookback_period}s{stop_loss}.png"
+        # extract pairname from filename
+        p=ohlcfile.replace("data/","").split("_")
+        pairname = f"{p[0]}_{p[1]}"
+        plot_name = f"{pairname}_n{negotiation_threshold}l{limitation_multiplier}c{contribution_threshold}k{lookback_period}s{stop_loss:.3f}_{total_profit_percentage-buy_and_hold_return:04.2f}.png"
 
-        plt.savefig(plot_name, dpi=100, bbox_inches='tight')
+        plt.savefig("img/"+plot_name, dpi=100, bbox_inches='tight')
 
         if verbosity != 101:
             plt.show()
@@ -553,6 +581,8 @@ def main(argv):
     from_date_dt = datetime.strptime(from_date, "%Y-%m-%d %H:%M:%S")
     to_date_dt = datetime.strptime(to_date, "%Y-%m-%d %H:%M:%S")
 
+    # csvstr = f"source,negotiation_threshold,limitation_multiplier,contribution_threshold,lookback_period,stop_loss_percentage,from_date,to_date,total_trades,profitable_trades,non_profitable_trades,profit_ratio,first_purchase_price,final_selling_price,total_profit,total_profit_percentage,buy_and_hold_return,current_capital,total_units_held,total_profit_percentage - buy_and_hold_return\n"
+    # print(csvstr,file=open("results.csv","w"))
     # starttime = time.time()
     while True:
         order_submission_status = ""
@@ -570,6 +600,7 @@ def main(argv):
                 to_date=to_date,
             )
             latest_data = strategy.run_strategy()
+            avg_volume = latest_data['average_volume']
             livemode_idx_iter += 1
             signal = strategy.get_signal()
             current_time = f"{latest_data.name}"  # CONVER TO STR
@@ -721,36 +752,45 @@ def main(argv):
         except Exception as e:
             print(f"An error occurred: {e}")
             traceback.print_exc()
-            print("Wait for 1 minute before retrying")
-            time.sleep(60)
+            exit()
+            # print("Wait 10 sec before retrying")
+            # time.sleep(10)
 
     # Calculate and print profitability ratio
     total_trades = profitable_trades + non_profitable_trades
     if total_trades > 0:
         profit_ratio = profitable_trades / total_trades
         buy_and_hold_return = (final_selling_price - initial_price) / initial_price * 100
+        avg_vol_price = avg_volume * final_selling_price
 
         if verbosity_level > 0 and verbosity_level < 100:
             str = f"""
-{fg.CYAN}
-Profitability Summary:          n:{negotiation_threshold} l:{limitation_multiplier} c:{contribution_threshold} k:{lookback_period} s:{stop_loss_percentage}{fg.RESET}
-Date Range:                     {from_date} - {to_date}
-TT: Total Trades:               {total_trades}
-PT: Profitable Trades:          {profitable_trades}
-PN: Non-Profitable Trades:      {non_profitable_trades}
-PR: Profit Ratio:               {profit_ratio:.2%}
+            {fg.CYAN}
+            Profitability Summary:          n:{negotiation_threshold} l:{limitation_multiplier} c:{contribution_threshold} k:{lookback_period} s:{stop_loss_percentage}{fg.RESET}
+            Date Range:                     {from_date} - {to_date}
+            TT: Total Trades:               {total_trades}
+            PT: Profitable Trades:          {profitable_trades}
+            PN: Non-Profitable Trades:      {non_profitable_trades}
+            PR: Profit Ratio:               {profit_ratio:.2%}
 
-IC: Initial Capital (1st buy): ${first_purchase_price:.2f}
-FS: Final Selling Price:       ${final_selling_price:.2f}
-TP: Total Profit:              ${total_profit:.2f} ({total_profit_percentage:.2f}%)
-BH: Buy-and-Hold Return:        {buy_and_hold_return:.2f}%
+            IC: Initial Capital (1st buy): ${first_purchase_price:.2f}
+            FS: Final Selling Price:       ${final_selling_price:.2f}
+            TP: Total Profit:              ${total_profit:.2f} ({total_profit_percentage:.2f}%)
+            BH: Buy-and-Hold Return:        {buy_and_hold_return:.2f}%
 
-FC: Final Capital:             ${current_capital:.2f}
-TR: Total Return:               {(current_capital - first_purchase_price) / first_purchase_price * 100:.2f}%
-TH: Total Units Held at End:    {total_units_held:.6f}
-"""
+            FC: Final Capital:             ${current_capital:.2f}
+            TR: Total Return:               {(current_capital - first_purchase_price) / first_purchase_price * 100:.2f}%
+            TH: Total Units Held at End:    {total_units_held:.6f}
+            CP: Compare P/L:                {total_profit_percentage - buy_and_hold_return:.2f}%
+            AV: Avg Volume:                ${avg_vol_price:.2f}
+            """
             print(str)
             # Calculate buy-and-hold return
+
+        # print(strategy.data['average_volume'])
+        # exit()
+
+
         if verbosity_level == 101:
             str = f"n:{fg.LIGHTBLUE_EX}{negotiation_threshold:1.2f}{fg.RESET}"
             str += F"l:{fg.LIGHTCYAN_EX}{limitation_multiplier:1.2f}{fg.RESET}"
@@ -760,13 +800,27 @@ TH: Total Units Held at End:    {total_units_held:.6f}
             str += f"|{from_date} - {to_date}"
             str += f"|TT: {fg.CYAN}{total_trades:4d}{fg.RESET}"
             str += f"|PN: {fg.YELLOW}{profitable_trades:3d}/{non_profitable_trades:3d}{fg.RESET}"
-            str += f"|PR: {fg.GREEN}{profit_ratio:.2%}{fg.RESET}"
-            str += f"|TP: {fg.RED}${total_profit:8.2f} ({total_profit_percentage:6.2f}%){fg.RESET}"
-            str += f"|FC: {fg.LIGHTCYAN_EX}${current_capital:8.2f}{fg.RESET}"
-            str += f"|TR: {fg.LIGHTYELLOW_EX}${(current_capital - first_purchase_price) / first_purchase_price * 100:6.2f}%{fg.RESET}"  #TODO replace focumla with buy_and_hold return, if theyt are teh same
-            str += f"|FL: {fg.LIGHTMAGENTA_EX}${first_purchase_price:8.2f}/{final_selling_price:8.2f}{fg.RESET}"
+            # str += f"|PR: {fg.GREEN}{profit_ratio:.2%}{fg.RESET}"
+            # str += f"|TP: {fg.RED}${total_profit:8.2f} ({total_profit_percentage:6.2f}%){fg.RESET}"
+            # str += f"|FC: {fg.LIGHTCYAN_EX}${current_capital:8.2f}{fg.RESET}"
+            # str += f"|TR: {fg.LIGHTYELLOW_EX}${(current_capital - first_purchase_price) / first_purchase_price * 100:6.2f}%{fg.RESET}"  #TODO replace focumla with buy_and_hold return, if theyt are teh same
+            # str += f"|FL: {fg.LIGHTMAGENTA_EX}${first_purchase_price:8.2f}/{final_selling_price:8.2f}{fg.RESET}"
+
+            str += f"|CP: {fg.LIGHTYELLOW_EX}{total_profit_percentage - buy_and_hold_return:.2f}%{fg.RESET}"
             str += f"|TH: {fg.LIGHTGREEN_EX}{total_units_held:8.6f}{fg.RESET}"
+            str += f"|AV: {fg.LIGHTCYAN_EX}{avg_vol_price:.2f}{fg.RESET}"
+
+
             print(str)
+
+            # FOR csv
+            csvstr = f"{ohlcfile},{negotiation_threshold},{limitation_multiplier},{contribution_threshold},"
+            csvstr += f"{lookback_period},{stop_loss_percentage},{from_date},{to_date},{total_trades},{profitable_trades},"
+            csvstr += f"{non_profitable_trades},{profit_ratio},{first_purchase_price},{final_selling_price},{total_profit},"
+            csvstr += f"{total_profit_percentage},{buy_and_hold_return},{current_capital},{total_units_held},"
+            csvstr += f"{avg_vol_price:.2f}"
+
+            print(csvstr,file=open("results.csv","a"),flush=True)
 
     else:
         print(fg.CYAN + f"\nNo trades were executed during the livemode." + fg.RESET)
@@ -784,6 +838,9 @@ TH: Total Units Held at End:    {total_units_held:.6f}
             volatility,
             verbosity_level,
             stop_loss_percentage,
+            ohlcfile,
+            total_profit_percentage,
+            buy_and_hold_return,
         )
 
 if __name__ == "__main__":
