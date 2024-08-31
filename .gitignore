@@ -15,3 +15,9 @@ OK
 RUN~
 __pycache__
 trade_bot_predataloader.py
+~*
+*~
+log*
+*log
+*out
+results*

@@ -113,6 +113,11 @@ You can customize the trading strategy by modifying the `TholonicStrategy` class
 - `calculate_indicators()`: Define the indicators used by your strategy.
 - `generate_signals()`: Implement the logic for generating buy and sell signals.
 
+## Utility Scripts
+- krun2.sh - wrapper to run the bot for all pairs in one go.
+- get_data.py - to get the data from kraken and save it in the data folder.
+- get_live_data.py - to get the data from kraken using the ccxt library.
+
 ## Disclaimer
 
 This program is for educational and research purposes only. It is not intended to be used as financial advice or a recommendation for any investment strategy. Always do your own research and consider seeking advice from a licensed financial advisor before making any investment decisions. When using the live trading mode, be aware of the risks involved in trading cryptocurrencies.
