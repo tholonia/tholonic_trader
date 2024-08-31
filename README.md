@@ -56,7 +56,7 @@ python trade_bot.py [options]
 
 - `-h, --help`: Show help message and exit
 - `-p PAIR, --pair=PAIR`: Trading pair (default: BTCUSD)
-- `-b, --livemode`: Run in live mode (default: backtest mode)
+- `-b, --livemode`: Run in live mode (default: backtest mode - livemode not yet enabled)
 - `-m MAX, --max-positions=MAX`: Maximum number of positions (default: 2)
 - `-n THRESHOLD, --negotiation=THRESHOLD`: Negotiation threshold (default: 1.0)
 - `-l MULTIPLIER, --limitation=MULTIPLIER`: Limitation multiplier (default: 1.5)
@@ -113,10 +113,11 @@ You can customize the trading strategy by modifying the `TholonicStrategy` class
 - `calculate_indicators()`: Define the indicators used by your strategy.
 - `generate_signals()`: Implement the logic for generating buy and sell signals.
 
-## Utility Scripts
+## Utility Scriptsm etc.
 - krun2.sh - wrapper to run the bot for all pairs in one go.
 - get_data.py - to get the data from kraken and save it in the data folder.
 - get_live_data.py - to get the data from kraken using the ccxt library.
+- krakenpairs.txt - list of all the pairs to run the bot for.
 
 ## Disclaimer
 
@@ -139,31 +140,6 @@ This updated README reflects the changes in the code, including:
 5. Updated description of the verbosity levels, including the new level 101 for batch processing
 
 # Notes:
-
-Download the data:
-```sh
-# ETHUSD 1Hr from 2024-07-27 to 2024-08-26
-./get_data.py -c ETH -b USD -f 2024-07-27 -t 2024-08-26 -i 60
-```
-This file will automatically be saved inm the `./data` folder as `ETH_USD_OHLC_60_20240727_20240826.csv`
-
-Run the bot in backtest mode (default mode):
-```sh
-./trade_bot.py -v 3  -n 0.5 -l 0.3 -c 1.4 -k 15 -s 4.8 -m 1 -R "2024-07-27|2024-08-26" -F data/ETH_USD_OHLC_60_20240727_20240826.csv
-```
-Testing so far shows the following settings to be the best for:
-
-### 1hr OHLC data
-
-- Crypto (bluechips)
-  - flat zone
-    - -n 0.5 -l 0.3 -c 1.4 -k 15 -s 4.8
-  - Bearish
-    -
-  - Bullish
-    -
-
-Test runs:
 
 Legend of abbreviation that _might_ be used:
 
@@ -205,10 +181,5 @@ Examples:
 
 # The output, when using '-v 101' looks somethign like this:
 n:0.50l:0.30c:1.40k:15s:4.80|2024-07-27 00:00:00 - 2024-08-30 16:56:35|TT:   19|PN:   7/ 12|PR: 36.84%|TP: $  121.28 (  4.99%)|FC: $ 3326.28|TR: $  3.78%|FL: $ 3205.00/ 2743.81
-```
-
-
-```
-
 ```
 
