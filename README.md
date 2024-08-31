@@ -169,7 +169,7 @@ Examples:
 # Get the data from Kraken (XBT is what Kraken calls BTC).
 # This is saved automatically as `data/XBT_USDT_OHLC_60_20240727_20240827.csv`
 ./get_data.py -c XBT -b USD -f 2024-07-27 -t 2024-08-27 -i 60
-# Process it. -v 101 shows on ly the final result, writes the CSV file
+# Process it. `-v 101` shows only the final result, writes the CSV file
 #   and plots the results to file only.
 # Use `-v 3` to see all the details and plots.
 # The n, l, c, k, s values are optimum for 1 hour charts.
