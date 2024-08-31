@@ -170,14 +170,14 @@ Examples:
 # This is saved automatically as `data/XBT_USDT_OHLC_60_20240727_20240827.csv`
 ./get_data.py -c XBT -b USD -f 2024-07-27 -t 2024-08-27 -i 60
 # Process it. -v 101 shows on ly the final result, writes the CSV file
-# and plots the results to file only.
-# Use -v 3 to see all the details and plots.
-# The n,l,c,k,s values are optimum for 1 hour charts.
+#   and plots the results to file only.
+# Use `-v 3` to see all the details and plots.
+# The n, l, c, k, s values are optimum for 1 hour charts.
 # The '-p XBT_USDT' is optional and only for information on the output.
-#If not specified, it will default to XBT_USD.
+#   If not specified, it will default to "XBT_USD."
 ./trade_bot.py -p XBT_USDT  -v 101  -n 0.5 -l 0.3 -c 1.4 -k 15  -F data/XBT_USDT_OHLC_60_20240727_20240827.csv -s 4.8 -m 1 -R "2024-07-27|2024-08-27"
 
-
+# Example for SOL/USD
 ./get_data.py -c SOL -b USD -f 2024-07-27 -t 2024-08-26 -i 60
 ./trade_bot.py -v 101  -n 0.5 -l 0.3 -c 1.4 -k 15  -F data/ETH_USD_OHLC_60_20240727_20240826.csv -s 4.8 -m 1 -R "2024-07-27|2024-08-30"
 
