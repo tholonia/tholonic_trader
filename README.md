@@ -147,10 +147,12 @@ Legend of abbreviation that _might_ be used:
 - l = limitation multiplier
 - c = contribution threshold
 - k = lookback_period
+- s = stop loss
+
 - TT = Total Trades
 - PT = Profitable Trades
 - PN = Non-Profitable Trades:
-- PR: Profit Ratio
+- PR = Profit Ratio
 - IC = Initial Capital (1st buy)
 - FS = Final Selling Price
 - TP = Total Profit
