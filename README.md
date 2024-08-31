@@ -114,10 +114,13 @@ You can customize the trading strategy by modifying the `TholonicStrategy` class
 - `generate_signals()`: Implement the logic for generating buy and sell signals.
 
 ## Utility Scriptsm etc.
+- krun.sh - wrapper to run the bot for only select pairs using default vals optimized for 1hr.
 - krun2.sh - wrapper to run the bot for all pairs in one go.
 - get_data.py - to get the data from kraken and save it in the data folder.
 - get_live_data.py - to get the data from kraken using the ccxt library.
 - krakenpairs.txt - list of all the pairs to run the bot for.
+- testvars.sh - wrapper to test the differtt values for vars.
+
 
 ## Disclaimer
 
@@ -186,4 +189,21 @@ Examples:
 # The output, when using '-v 101' looks somethign like this:
 n:0.50l:0.30c:1.40k:15s:4.80|2024-07-27 00:00:00 - 2024-08-30 16:56:35|TT:   19|PN:   7/ 12|PR: 36.84%|TP: $  121.28 (  4.99%)|FC: $ 3326.28|TR: $  3.78%|FL: $ 3205.00/ 2743.81
 ```
+If you are using the defaults, and you already have the data files:
+```
+FT="2024-07-27|2024-08-27"
+V="-v 101"
+./trade_bot.py -p SOL_USD  ${V} -F data/SOL_USD_OHLC_60_20240727_20240827.csv -R "${FT}"
+./trade_bot.py -p XBT_USD  ${V} -F data/XBT_USD_OHLC_60_20240727_20240827.csv -R "${FT}"
+./trade_bot.py -p XDG_USD  ${V} -F data/XDG_USD_OHLC_60_20240727_20240827.csv -R "${FT}"
+./trade_bot.py -p ETH_USD  ${V} -F data/ETH_USD_OHLC_60_20240727_20240827.csv -R "${FT}"
+```
+
+## ToDo
+- Predfine test ranges
+- Add livemode
+- Add TOML config files
+- Optimize code (send dicts/arrays rather than a million variables)
+- integrate CSV headers into code
+
 

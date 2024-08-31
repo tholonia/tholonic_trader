@@ -20,6 +20,7 @@ import getopt
 from datetime import datetime
 import re
 import traceback
+from pprint import pprint
 
 
 def report_time(name,starttime,endtime):
@@ -198,10 +199,11 @@ def print_trading_info(
         long_positions,
         num_positions,
         order_submission_status,
-        total_units_held,
+        value_in_assets_held,
         transaction_profit = None,
     ):
-    base_message = f"{idx:04d} Timestamp: {timestamp}, Pair: {trading_pair}, Signal: {signal}, Close Price: {close_price:.2f}, Total Units Held: {total_units_held:.6f}, Avg Position: {avg_position_price:.2f}, Total Profit: {total_profit:.2f} ({total_profit_percentage:.2f}%), Long Positions: {long_positions}, Num Positions: {num_positions}"
+
+    base_message = f"{trading_pair}{idx:04d} Timestamp: {timestamp}, Pair: {trading_pair}, Signal: {signal}, Close Price: {close_price:.2f}, Total Units Held: {value_in_assets_held:.6f}, Avg Position: {avg_position_price:.2f}, Total Profit: {total_profit:.2f} ({total_profit_percentage:.2f}%), Long Positions: {long_positions}, Num Positions: {num_positions}"
 
     if signal == "HOLD":
         pass
@@ -211,7 +213,7 @@ def print_trading_info(
         _ts = f"{timestamp}"
         _tp = f"{trading_pair}"
         _cp = f"Close: ${close_price:.2f}"
-        _th = f"Total Units Held: {total_units_held:.6f}"
+        _th = f"Total Units Held: {value_in_assets_held:.6f}"
         _ap = f"Avg Pos: ${avg_position_price}"
         _np = f"Num Pos: {num_positions}"
 
@@ -478,15 +480,15 @@ def print_usage():
 def main(argv):
     trading_pair = "BTCUSD"
     livemode = False
-    max_positions = 2
+    max_positions = 1
     # ideal for 1h candles
-    negotiation_threshold = 1.0
-    limitation_multiplier = 1.5
-    contribution_threshold = 1.2
-    lookback_period = 16
+    negotiation_threshold = 0.5
+    limitation_multiplier = 0.3
+    contribution_threshold = 1.4
+    lookback_period = 15
+    stop_loss_percentage = 4.8 # 1%
 
     commission_rate = 0.001 # 0.1%
-    stop_loss_percentage = 1 # 1%
     initial_balance = 1000
     verbosity_level = 0
     limitcount = 720
@@ -495,7 +497,7 @@ def main(argv):
     to_date = "2017-12-16"
 
 
-    total_units_held = 0
+    value_in_assets_held = 0
 
     try:
         opts, args = getopt.getopt(argv, "hp:bm:n:l:c:k:r:s:i:v:L:F:R:",
@@ -559,6 +561,7 @@ def main(argv):
 
     first_purchase_price = None
     final_selling_price = 0
+    last_value_in_assets_held = 0
 
     # thus uses the entire file by default
 #    from_date, to_date = extract_date_range_from_special_csv(ohlcfile)
@@ -566,6 +569,7 @@ def main(argv):
     # Profitability tracking
     profitable_trades = 0
     non_profitable_trades = 0
+    break_on_end = False
 
     # Buy-and-hold tracking
     initial_price = None
@@ -609,12 +613,8 @@ def main(argv):
             in_date_range = from_date_dt <= current_time_dt <= to_date_dt
             available_positions = max_positions - len(current_positions)
 
-            # stop signal
-            if current_time_dt > to_date_dt:
-                break
-
-            # Break when we get to the end of the data (for livemodeing)
-            if current_time == previous_time:# or livemode_idx_iter > limitcount:
+            # Break when we get to the last date or we read teh same record twice or hit the count limit
+            if current_time_dt > to_date_dt or current_time == previous_time or livemode_idx_iter > limitcount:
                 break
             previous_time = current_time
 
@@ -646,7 +646,8 @@ def main(argv):
                     current_positions.append((current_price, units_to_buy))
 
                     # Add the units to the total units held
-                    total_units_held += units_to_buy
+                    value_in_assets_held += units_to_buy
+                    last_value_in_assets_held = value_in_assets_held
 
                     # Set the long_positions flag to True
                     long_positions = True
@@ -670,21 +671,21 @@ def main(argv):
                             long_positions,
                             num_positions,
                             order_submission_status,
-                            total_units_held,
+                            value_in_assets_held,
                         )
                 else:
                     order_submission_status = "unavailable"
 
+
+
             # Handling the SELL signal when there are open positions
             elif signal == "SELL" and current_positions and in_date_range: #! and latest_data['volatility'] >= 1000: # and total_units_held > 0:
-
                 volatility = latest_data['volatility']
                 average_volatility = latest_data['average_volatility']
 
                 # Calculate the profit for closing all positions at the current price, including commission
                 total_amount = sum(amount for _, amount in current_positions)
                 profit, profit_percentage = calculate_profit(current_positions, current_price, total_amount, commission_rate)
-                total_units_held = 0
 
                 # Update profitability tracking
                 if profit > 0:
@@ -699,6 +700,7 @@ def main(argv):
 
                 # Update the current capital
                 current_capital += profit
+                value_in_assets_held = 0
 
                 # Close all positions by resetting the current_positions list
                 current_positions = []
@@ -728,7 +730,7 @@ def main(argv):
                         long_positions,
                         num_positions,
                         order_submission_status,
-                        total_units_held,
+                        value_in_assets_held,
                         transaction_profit,
                     )
                     # print(fg.YELLOW + f"Total units held after sell: {total_units_held:.6f}" + fg.RESET)
@@ -766,7 +768,7 @@ def main(argv):
         if verbosity_level > 0 and verbosity_level < 100:
             str = f"""
             {fg.CYAN}
-            Profitability Summary:          n:{negotiation_threshold} l:{limitation_multiplier} c:{contribution_threshold} k:{lookback_period} s:{stop_loss_percentage}{fg.RESET}
+            Profitability Summary:          {trading_pair} n:{negotiation_threshold} l:{limitation_multiplier} c:{contribution_threshold} k:{lookback_period} s:{stop_loss_percentage}{fg.RESET}
             Date Range:                     {from_date} - {to_date}
             TT: Total Trades:               {total_trades}
             PT: Profitable Trades:          {profitable_trades}
@@ -780,7 +782,7 @@ def main(argv):
 
             FC: Final Capital:             ${current_capital:.2f}
             TR: Total Return:               {(current_capital - first_purchase_price) / first_purchase_price * 100:.2f}%
-            TH: Total Units Held at End:    {total_units_held:.6f}
+            TH: Total Units Held at End:    {last_value_in_assets_held:.6f}
             CP: Compare P/L:                {total_profit_percentage - buy_and_hold_return:.2f}%
             AV: Avg Volume:                ${avg_vol_price:.2f}
             """
@@ -792,11 +794,12 @@ def main(argv):
 
 
         if verbosity_level == 101:
-            str = f"n:{fg.LIGHTBLUE_EX}{negotiation_threshold:1.2f}{fg.RESET}"
-            str += F"l:{fg.LIGHTCYAN_EX}{limitation_multiplier:1.2f}{fg.RESET}"
-            str += f"c:{fg.LIGHTMAGENTA_EX}{contribution_threshold:1.2f}{fg.RESET}"
-            str += f"k:{fg.LIGHTGREEN_EX}{lookback_period:02d}{fg.RESET}"
-            str += f"s:{fg.LIGHTBLUE_EX}{stop_loss_percentage*100:.2f}{fg.RESET}"
+            str = f"{trading_pair:10s}{fg.RESET}"
+            str += f"{fg.LIGHTBLUE_EX}n:{negotiation_threshold:.1f}{fg.RESET}"
+            str += F"{fg.LIGHTCYAN_EX}l:{limitation_multiplier:.1f}{fg.RESET}"
+            str += f"{fg.LIGHTMAGENTA_EX}c:{contribution_threshold:.1f}{fg.RESET}"
+            str += f"{fg.LIGHTGREEN_EX}k:{lookback_period:02d}{fg.RESET}"
+            str += f"{fg.LIGHTBLUE_EX}s:{stop_loss_percentage:.1f}{fg.RESET}"
             str += f"|{from_date} - {to_date}"
             str += f"|TT: {fg.CYAN}{total_trades:4d}{fg.RESET}"
             str += f"|PN: {fg.YELLOW}{profitable_trades:3d}/{non_profitable_trades:3d}{fg.RESET}"
@@ -806,9 +809,9 @@ def main(argv):
             # str += f"|TR: {fg.LIGHTYELLOW_EX}${(current_capital - first_purchase_price) / first_purchase_price * 100:6.2f}%{fg.RESET}"  #TODO replace focumla with buy_and_hold return, if theyt are teh same
             # str += f"|FL: {fg.LIGHTMAGENTA_EX}${first_purchase_price:8.2f}/{final_selling_price:8.2f}{fg.RESET}"
 
-            str += f"|CP: {fg.LIGHTYELLOW_EX}{total_profit_percentage - buy_and_hold_return:.2f}%{fg.RESET}"
-            str += f"|TH: {fg.LIGHTGREEN_EX}{total_units_held:8.6f}{fg.RESET}"
-            str += f"|AV: {fg.LIGHTCYAN_EX}{avg_vol_price:.2f}{fg.RESET}"
+            str += f"|CP: {fg.LIGHTYELLOW_EX}{total_profit_percentage - buy_and_hold_return:+6.2f}%{fg.RESET}"
+            str += f"|TH: {fg.LIGHTGREEN_EX}{last_value_in_assets_held:8.6f}{fg.RESET}"
+            str += f"|AV: {fg.LIGHTCYAN_EX}${avg_vol_price:>12,.2f}{fg.RESET}"
 
 
             print(str)
@@ -817,7 +820,7 @@ def main(argv):
             csvstr = f"{ohlcfile},{negotiation_threshold},{limitation_multiplier},{contribution_threshold},"
             csvstr += f"{lookback_period},{stop_loss_percentage},{from_date},{to_date},{total_trades},{profitable_trades},"
             csvstr += f"{non_profitable_trades},{profit_ratio},{first_purchase_price},{final_selling_price},{total_profit},"
-            csvstr += f"{total_profit_percentage},{buy_and_hold_return},{current_capital},{total_units_held},"
+            csvstr += f"{total_profit_percentage},{buy_and_hold_return},{current_capital},{last_value_in_assets_held},"
             csvstr += f"{avg_vol_price:.2f}"
 
             print(csvstr,file=open("results.csv","a"),flush=True)
