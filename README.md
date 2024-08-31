@@ -141,7 +141,7 @@ This updated README reflects the changes in the code, including:
 
 # Notes:
 
-Legend of abbreviation that _might_ be used:
+Legend of abbreviations that _might_ be used:
 
 - n = negotiation threshold
 - l = limitation multiplier
