@@ -34,7 +34,8 @@ class TholonicStrategy:
         self.contribution_threshold = contribution_threshold
         self.livemode = livemode
         self.livemode_n_elements = livemode_n_elements
-
+        self.macd = None
+        self.signal = None
         if not self.livemode:
             loader = DataLoader(ohlcfile, from_date, to_date, self.livemode_n_elements)
             self.data = loader.get_data()
@@ -69,6 +70,8 @@ class TholonicStrategy:
         self.data['volatility'] = self.data['close'].rolling(window=self.lookback).std()
         self.data['average_volatility'] = self.data['volatility'].rolling(window=self.lookback).mean()
 
+    # def determine_movement(self):
+
     def generate_signals(self):
         self.data['negotiation_condition'] = self.data['price_change'] >= self.negotiation_threshold
         self.data['limitation_condition'] = self.data['volume'] >= self.data['average_volume'] * self.limitation_multiplier
@@ -83,6 +86,33 @@ class TholonicStrategy:
             (self.data['volatility'].shift(1) >= self.data['average_volatility'].shift(1))
         )
 
+    def calculate_macd(self, fast_period=12, slow_period=26, signal_period=9):
+        # Calculate the MACD
+        exp1 = self.data['close'].ewm(span=fast_period, adjust=False).mean()
+        exp2 = self.data['close'].ewm(span=slow_period, adjust=False).mean()
+        self.macd = exp1 - exp2
+        self.signal = self.macd.ewm(span=signal_period, adjust=False).mean()
+
+        # Determine if it's bullish or bearish based on the MACD line's direction
+        if len(self.macd) >= 2:
+            if (
+                self.macd.iloc[-1] > self.macd.iloc[-4] and
+                self.macd.iloc[-4] > self.macd.iloc[-8]
+            ):
+                return "BULL"   #! ?? if I return -1,1,0 instead, it finds no transactions !?
+            elif (
+                self.macd.iloc[-1] < self.macd.iloc[-4] and
+                self.macd.iloc[-4] < self.macd.iloc[-8]
+            ):
+                return "BEAR"
+            elif abs(self.data['close'].iloc[-1] - self.data['close'].iloc[-2]) < 0.0001:
+                return "FLAT"
+            else:
+                return "UNKNOWN"
+        else:
+            # Not enough data to determine direction
+            return "FLAT"
+
     def run_strategy(self):
         self.update_data()
         if self.data['volume'].iloc[-1] * self.data['close'].iloc[-1] < 5000:
@@ -90,13 +120,25 @@ class TholonicStrategy:
             exit()
         self.calculate_indicators()
         self.generate_signals()
-        return self.data.iloc[-1]
+
+        # Calculate MACD signal
+        macd_signal = self.calculate_macd()
+
+        # Add MACD signal and values to the latest data
+        latest_data = self.data.iloc[-1].copy()
+        latest_data['macd_signal'] = macd_signal
+        latest_data['macd'] = self.macd.iloc[-1] if self.macd is not None else None
+        latest_data['macd_signal_line'] = self.signal.iloc[-1] if self.signal is not None else None
+
+        return latest_data
 
     def get_signal(self):
         latest_data = self.data.iloc[-1]
-        if latest_data['buy_condition']:
+        macd_signal = self.calculate_macd()
+
+        if latest_data['buy_condition']:# and macd_signal == "BEAR" or macd_signal == "FLAT":
             return 'BUY'
-        elif latest_data['sell_condition']:
+        elif latest_data['sell_condition']:# or macd_signal == "BULL":
             return 'SELL'
         else:
             return 'HOLD'

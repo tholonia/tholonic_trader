@@ -58,6 +58,10 @@ def main(argv):
     trading_pair = "BTCUSD"
     livemode = False
     max_positions = 1
+
+    #for comparing return of macd signal
+
+
     #! ideal for BTCUSD1h candles for 2024-07-27 - 2024-08-27 KRAKEN
     # negotiation_threshold = 0.5
     # limitation_multiplier = 0.3
@@ -199,13 +203,14 @@ def main(argv):
             latest_data = strategy.run_strategy()
 
             avg_volume = latest_data['average_volume']
-            livemode_idx_iter += 1
             signal = strategy.get_signal()
+
             current_time = f"{latest_data.name}"  # CONVER TO STR
             current_time_dt = datetime.strptime(current_time, "%Y-%m-%d %H:%M:%S")
             current_price = latest_data['close']
             in_date_range = from_date_dt <= current_time_dt <= to_date_dt
             available_positions = max_positions - len(current_positions)
+            livemode_idx_iter += 1
 
             # Break when we get to the last date or we read teh same record twice or hit the count limit
             if current_time_dt > to_date_dt or current_time == previous_time or livemode_idx_iter > limitcount:
@@ -224,9 +229,14 @@ def main(argv):
                 if verbosity_level > 1 and verbosity_level < 100:
                     print(fg.LIGHTYELLOW_EX + f"Stop loss ({stop_loss_percentage:.2f}%) triggered at {current_price:.2f}" + fg.RESET)
 
+
+
             # Position management
             if signal == "BUY":
-                if available_positions > 0 and in_date_range: #! and latest_data['volatility'] < 1000:
+                if (available_positions > 0 and
+                    in_date_range): #! and latest_data['volatility'] < 1000:
+                    print(f"MACD Signal: {latest_data['macd_signal']}")
+
                     if initial_price is None:
                         initial_price = current_price
 
