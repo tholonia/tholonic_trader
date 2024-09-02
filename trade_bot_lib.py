@@ -289,6 +289,132 @@ def check_stop_loss(positions, current_price, stop_loss_percentage):
     stop_loss_price = avg_entry_price * (1 - stop_loss_percentage)
     return current_price <= stop_loss_price
 
+def generate_report(trading_pair, negotiation_threshold, limitation_multiplier, contribution_threshold,
+                    lookback_period, stop_loss_percentage, from_date, to_date, total_trades,
+                    profitable_trades, non_profitable_trades, first_purchase_price, final_selling_price,
+                    total_profit, total_profit_percentage, current_capital, last_value_in_assets_held,
+                    hodl_percentage, avg_vol_price, verbosity_level, ohlcfile, write_cvs_header_once):
+
+    FCY = fg.CYAN
+    FLB = fg.LIGHTBLUE_EX
+    FLM = fg.LIGHTMAGENTA_EX
+    FLG = fg.LIGHTGREEN_EX
+    FLY = fg.LIGHTYELLOW_EX
+    FLC = fg.LIGHTCYAN_EX
+    FRE = fg.RED
+    FYE = fg.YELLOW
+    FXX = fg.RESET
+
+    profit_ratio = profitable_trades / total_trades if total_trades > 0 else 0
+
+    CX = f"{trading_pair}"
+    NT = f"{negotiation_threshold}"
+    LT = f"{limitation_multiplier}"
+    CT = f"{contribution_threshold}"
+    KP = f"{lookback_period}"
+    SL = f"{stop_loss_percentage}"
+    PS = f"{CX} n:{NT} l:{LT} c:{CT} k:{KP} s:{SL}{fg.RESET}"
+    FR = f"{from_date}"
+    TO = f"{to_date}"
+    TT = f"{total_trades}"
+    PT = f"{profitable_trades}"
+    PN = f"{non_profitable_trades}"
+    PR = f"{profit_ratio:.2%}"
+    IC = f"${first_purchase_price:.2f}"
+    FS = f"${final_selling_price:.2f}"
+    TP = f"${total_profit:.2f})"
+    TC = f"{total_profit_percentage:.2f}%"
+    HP = f"{hodl_percentage:.2f}%"
+    FC = f"${current_capital:.2f}"
+    TR = f"{(current_capital - first_purchase_price) / first_purchase_price * 100:.2f}%"
+    TH = f"{last_value_in_assets_held:.6f}"
+    HC = f"{total_profit_percentage - hodl_percentage:.2f}%"
+    AV = f"${avg_vol_price:.2f}"
+
+    ch = {
+        'CX': "trading_pair",
+        'NT': "negotiation_threshold",
+        'LT': "limitation_multiplier",
+        'CT': "contribution_threshold",
+        'KP': "lookback_period",
+        'SL': "stop_loss_percentage",
+        'FR': "from_date",
+        'TO': "to_date",
+        'TT': "total_trades",
+        'PT': "profitable_trades",
+        'PN': "non_profitable_trades",
+        'PR': "profit_ratio",
+        'IC': "first_purchase_price",
+        'FS': "final_selling_price",
+        'TP': "total_profit",
+        'TC': "total_profit_percentage",
+        'TR': "total_return",
+        'BH': "buy_and_hold_return",
+        'FC': "current_capital",
+        'TH': "last_value_in_assets_held",
+        'HP': "HOLD_percentage",
+        'HC': "HODL_compare",
+        'AV': "avg_vol_price",
+    }
+
+    if verbosity_level > 0 and verbosity_level < 100:
+        str = f"""
+        {fg.CYAN}
+        PS: Profitability Summary:         {PS}
+        FR: {ch['FR']:30s} {FR}
+        TO: {ch['TO']:30s} {TO}
+        TT: {ch['TT']:30s} {TT}
+        PT: {ch['PT']:30s} {PT}
+        PN: {ch['PN']:30s} {PN}
+        PR: {ch['PR']:30s} {PR}
+
+        IC: {ch['IC']:30s} {IC}
+        FS: {ch['FS']:30s} {FS}
+        TP: {ch['TP']:30s} {TP}
+        BH: {ch['BH']:30s} {HP}
+
+        FC: {ch['FC']:30s} {FC}
+        TR: {ch['TR']:30s} {TR}
+        TH: {ch['TH']:30s} {TH}
+        HP: {ch['HP']:30s} {HP}
+        HC: {ch['HC']:30s} {HC}
+        AV: {ch['AV']:30s} {AV}
+        {fg.RESET}
+
+        """
+        print(str)
+
+    if verbosity_level == 101:
+        str  = f"{FCY}{CX:10s}{FXX}"
+        str += f"{FLB}n:{NT:.1f}{FXX}"
+        str += F"{FLC}l:{LT:.1f}{FXX}"
+        str += f"{FLM}c:{CT:.1f}{FXX}"
+        str += f"{FLG}k:{KP:02d}{FXX}"
+        str += f"{FLB}s:{SL:>.1f}{FXX}"
+        str += f"|{FR} - {TO}"
+        str += f"|TT: {FCY}{TT:4d}{FXX}"
+        str += f"|PN: {FYE}{PT:3d}/{PN:3d}{FXX}"
+        str += f"|HC: {FLY}{HC:+6.2f}%{FXX}"
+        str += f"|TH: {FLG}{TH:8.6f}{FXX}"
+        str += f"|AV: {FLC}${AV:>12,.2f}{FXX}"
+        print(str)
+
+        cvsheader  = f"{ohlcfile},{ch['NT']},{ch['LT']},{ch['CT']},{ch['KP']},{ch['SL']},{ch['FR']},{ch['TO']},"
+        cvsheader += f"{ch['TT']},{ch['PT']},{ch['PN']},{ch['PR']},{ch['IC']},{ch['FS']},{ch['TP']},{ch['TC']},"
+        cvsheader += f"{ch['BH']},{ch['FC']},{ch['TH']},{ch['AV']},{ch['HP']},{ch['HC']}"
+
+        csvstr  = f"{ohlcfile},{NT},{LT},{CT},{KP},{SL},{FR},{TO},"
+        csvstr += f"{TT},{PT},{PN},{PR},{IC},{FS},{TP},{TC},"
+        csvstr += f"{HP},{FC},{TH},{AV},{HP},{HC}"
+
+        if write_cvs_header_once:
+            print(cvsheader,file=open("results.csv","w"),flush=True)
+            return False
+        else:
+            print(csvstr,file=open("results.csv","a"),flush=True)
+            return write_cvs_header_once
+
+
 FCY = fg.CYAN
 FLB = fg.LIGHTBLUE_EX
 FLM = fg.LIGHTMAGENTA_EX
