@@ -22,3 +22,10 @@ log*
 *out
 results*
 run
+*.psd
+*.jpg
+*.png
+*.xlsx
+*.csv
+NOTES.md
+*.db

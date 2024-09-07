@@ -12,7 +12,7 @@ This Python program implements a versatile trading strategy tool that can functi
 - Custom trading strategy implementation (Tholonic Strategy)
 - Dual mode operation:
   - Backtesting using historical price data
-  - Live trading using real-time data from Kraken
+  - Live trading using real-time data from Kraken (not yet fully implemented)
 - Support for multiple trading pairs
 - Configurable parameters via command-line arguments
 - Profit and loss tracking
@@ -26,6 +26,8 @@ This Python program implements a versatile trading strategy tool that can functi
   - Profit ratio
   - Total profit and profit percentage
   - Buy-and-hold return comparison
+- MACD sentiment analysis for improved trading decisions
+- Excel reporting for detailed trade analysis
 
 ## Requirements
 
@@ -35,35 +37,39 @@ This Python program implements a versatile trading strategy tool that can functi
 - ccxt
 - colorama
 - matplotlib
+- openpyxl
 
 ## Installation
 
 1. Clone this repository:
 ```sh
-git clone https://github.com/yourusername/trading-strategy-tool.git cd trading-strategy-tool
+git clone https://github.com/tholonia/tholonic_trader.git
+cd tholonic_trader
 ```
 2. Install the required packages:
 ```sh
 pip install -r requirements.txt
 ```
+
 ## Usage
 
 You can run the program using command-line arguments to set various parameters:
 ```sh
 python trade_bot.py [options]
 ```
+
 ### Options:
 
 - `-h, --help`: Show help message and exit
 - `-p PAIR, --pair=PAIR`: Trading pair (default: BTCUSD)
-- `-b, --livemode`: Run in live mode (default: backtest mode - livemode not yet enabled)
-- `-m MAX, --max-positions=MAX`: Maximum number of positions (default: 2)
-- `-n THRESHOLD, --negotiation=THRESHOLD`: Negotiation threshold (default: 1.0)
-- `-l MULTIPLIER, --limitation=MULTIPLIER`: Limitation multiplier (default: 1.5)
-- `-c THRESHOLD, --contribution=THRESHOLD`: Contribution threshold (default: 1.2)
-- `-k PERIOD, --lookback=PERIOD`: Lookback period (default: 16)
+- `-b, --livemode`: Run in live mode (default: backtest mode - livemode not yet fully implemented)
+- `-m MAX, --max-positions=MAX`: Maximum number of positions (default: 1)
+- `-n THRESHOLD, --negotiation=THRESHOLD`: Negotiation threshold (default: 0.5)
+- `-l MULTIPLIER, --limitation=MULTIPLIER`: Limitation multiplier (default: 0.3)
+- `-c THRESHOLD, --contribution=THRESHOLD`: Contribution threshold (default: 1.4)
+- `-k PERIOD, --lookback=PERIOD`: Lookback period (default: 15)
 - `-r RATE, --commission=RATE`: Commission rate (default: 0.001 = 0.1%)
-- `-s PERCENTAGE, --stop-loss=PERCENTAGE`: Stop loss percentage (default: 1%)
+- `-s PERCENTAGE, --stop-loss=PERCENTAGE`: Stop loss percentage (default: 4.8%)
 - `-i BALANCE, --initial-balance=BALANCE`: Initial balance for buy-and-hold comparison (default: 1000)
 - `-v LEVEL, --verbosity=LEVEL`: Verbosity level (default: 0)
 - `-R RANGE, --daterange=RANGE`: Date range in format "YYYY-MM-DD|YYYY-MM-DD" or "YYYY-MM-DD|now"
@@ -91,11 +97,14 @@ python trade_bot.py -p ETHUSD -m 3 -n 1.2 -l 1.8 -c 1.5 -k 30 -r 0.002 -s 3 -v 2
 ```sh
 python trade_bot.py -p BTCUSD -m 2 -n 1.0 -l 1.5 -c 1.2 -k 20 -r 0.001 -s 1 -i 1000 -v 3 -R "2024-01-01|2024-06-30" -F data/BTCUSD_OHLC_60.csv
 ```
+
 ## Data Handling
 
 - In backtest mode, the program reads historical data from CSV files in the `data/` directory. The file should be named according to the trading pair and timeframe, e.g., `BTCUSD_OHLC_60.csv` for hourly data.
 - In live mode, it fetches real-time data from Kraken using the CCXT library.
-- images are saved in the `/img` folder.
+- Images are saved in the `/img` folder.
+- Excel reports are generated for detailed trade analysis.
+
 ## Visualization
 
 The program generates a plot with three subplots:
@@ -112,15 +121,17 @@ You can customize the trading strategy by modifying the `TholonicStrategy` class
 
 - `calculate_indicators()`: Define the indicators used by your strategy.
 - `generate_signals()`: Implement the logic for generating buy and sell signals.
+- `calculate_macd_sentiment()`: Adjust the MACD sentiment analysis for improved trading decisions.
 
-## Utility Scriptsm etc.
-- krun.sh - wrapper to run the bot for only select pairs using default vals optimized for 1hr.
-- krun2.sh - wrapper to run the bot for all pairs in one go.
-- get_data.py - to get the data from kraken and save it in the data folder.
-- get_live_data.py - to get the data from kraken using the ccxt library.
-- krakenpairs.txt - list of all the pairs to run the bot for.
-- testvars.sh - wrapper to test the differtt values for vars.
+## Utility Scripts and Additional Files
 
+- `krun.sh`: Wrapper to run the bot for only select pairs using default values optimized for 1hr charts.
+- `krun2.sh`: Wrapper to run the bot for all pairs in one go.
+- `get_data.py`: Script to fetch historical data from Kraken and save it in the data folder.
+- `get_live_data.py`: Script to fetch real-time data from Kraken using the CCXT library.
+- `krakenpairs.txt`: List of all the pairs to run the bot for.
+- `testvars.sh`: Wrapper to test different values for variables.
+- `testvars_fast.py`: Python script for faster backtesting of multiple parameter combinations.
 
 ## Disclaimer
 
@@ -134,17 +145,9 @@ Contributions to improve the trading strategy tool are welcome. Please feel free
 
 This project is open-source and available under the MIT License.
 
-This updated README reflects the changes in the code, including:
+## Notes:
 
-1. Updated command-line options and their default values
-2. New features like stop loss and date range specification
-3. Changes in the visualization (removal of price delta plot, addition of volatility plot)
-4. More detailed examples of how to run the script
-5. Updated description of the verbosity levels, including the new level 101 for batch processing
-
-# Notes:
-
-Legend of abbreviations that _might_ be used:
+Legend of abbreviations that might be used:
 
 - n = negotiation threshold
 - l = limitation multiplier
@@ -166,8 +169,6 @@ Legend of abbreviations that _might_ be used:
 - CP = Compare P total profit % over buy and hold %
 - AV = Avg Volume
 
-
-
 Examples:
 
 ```sh
@@ -186,7 +187,7 @@ Examples:
 ./get_data.py -c SOL -b USD -f 2024-07-27 -t 2024-08-26 -i 60
 ./trade_bot.py -v 101  -n 0.5 -l 0.3 -c 1.4 -k 15  -F data/ETH_USD_OHLC_60_20240727_20240826.csv -s 4.8 -m 1 -R "2024-07-27|2024-08-30"
 
-# The output, when using '-v 101' looks somethign like this:
+# The output, when using '-v 101' looks something like this:
 n:0.50l:0.30c:1.40k:15s:4.80|2024-07-27 00:00:00 - 2024-08-30 16:56:35|TT:   19|PN:   7/ 12|PR: 36.84%|TP: $  121.28 (  4.99%)|FC: $ 3326.28|TR: $  3.78%|FL: $ 3205.00/ 2743.81
 ```
 If you are using the defaults, and you already have the data files:
@@ -200,10 +201,11 @@ V="-v 101"
 ```
 
 ## ToDo
-- Predfine test ranges
-- Add livemode
+- Predefine test ranges
+- Implement full livemode functionality
 - Add TOML config files
 - Optimize code (send dicts/arrays rather than a million variables)
-- integrate CSV headers into code
-
-
+- Integrate CSV headers into code
+- Implement more advanced risk management features
+- Add support for multiple simultaneous trading pairs
+- Develop a web interface for easier strategy configuration and result visualization
