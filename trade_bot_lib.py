@@ -30,6 +30,10 @@ from ExcelReporterClass import ExcelReporter
 # from DataLoaderClass import DataLoader
 from TholonicStrategyClass import TholonicStrategy
 from ProfitLossPlotterClass import ProfitLossPlotter
+from datetime import datetime, timedelta
+from decimal import Decimal, ROUND_HALF_UP
+import csv
+
 
 
 
@@ -340,6 +344,63 @@ def generate_report(outputfile,trading_pair, negotiation_threshold, limitation_m
     with open(outputfile,"w") as f:
         f.write(cvsheader+"\n")
         f.write(csvstr+"\n")
+
+def print_colored(text, color):
+    """
+    Print text in the specified color.
+    Returns:    None
+    """
+    print(color + text + fg.RESET)
+
+def format_number(number, decimals=2):
+    """
+    Format a number to a specified number of decimal places.
+    Returns: str: The formatted number as a string.
+    """
+    return f"{number:.{decimals}f}"
+
+def calculate_percentage(part, whole):
+    """
+    Calculate the percentage of a part relative to a whole.
+    Returns:float: The calculated percentage.
+    """
+    return (part / whole) * 100 if whole != 0 else 0
+
+def parse_date(date_string):
+    """
+    Parse a date string into a datetime object.
+    Returns: datetime: The parsed datetime object.
+    """
+    return datetime.strptime(date_string, "%Y-%m-%d %H:%M:%S")
+
+def calculate_time_difference(start_date, end_date):
+    """
+    Calculate the time difference between two dates.
+    Returns: timedelta: The time difference.
+    """
+    return end_date - start_date
+
+def print_testvarsusage():
+    str = f"""
+    Usage: python testvars_fast.py
+    """
+
+def limit_decimals(number, decimals=2):
+    """
+    Limit the number of decimal places in a number.
+    Returns: float: The number with the specified number of decimal places.
+    """
+    return float(Decimal(str(number)).quantize(Decimal(f"0.{'0'*decimals}"), rounding=ROUND_HALF_UP))
+
+def count_csv_lines(file_path):
+    """
+    Count the number of lines in a CSV file.
+    Returns: int: The number of lines in the CSV file.
+    """
+    with open(file_path, 'r') as file:
+        return sum(1 for row in csv.reader(file))
+
+
 
 
 FCY = fg.CYAN
