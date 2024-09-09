@@ -8,3 +8,11 @@ testvars_fast:
   negRange: [0.1, 4.0, 0.1]
   limRange: [0.0, 2.0, 0.1]
   conRange: [1.0, 5.0, 0.1]
+get_data_COINBASE_BTC:
+  crypto_symbol: "BTC"
+  base_symbol: "USD"
+  # from_date: "2024-08-27"
+  # to_date: "2024-08-28"
+  from_date: 16
+  to_date: "NOW"
+  granularity: 3600  # Default to 1 hour
