@@ -10,7 +10,7 @@ livemode = false
 csv_file = "/home/jw/src/cbot/data/BTC_USD_OHLC_60_20230727_20240827.csv"
 
 [cfg]
-reportfilename = "nlc_results.csv"
+reportfilename = "nlc_results.xlsx"
 # exchange = "kraken"
 exchange = "coinbase"
 from_date = "2023-07-27 00:00:00"

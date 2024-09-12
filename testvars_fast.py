@@ -67,9 +67,9 @@ if __name__ == "__main__":
 
 
     # create the excel file
-    try: os.unlink("output.xlsx")
+    try: os.unlink(reportfilename)
     except: pass
-    xlsx_reporter = ExcelReporter("output.xlsx")
+    xlsx_reporter = ExcelReporter(reportfilename)
     xlsx_reporter.load_or_create_workbook()
     header = ['FromDate','ToDate','N','L','C','K','Total Return','NumTrades','Win Rate','%/HODL','InSent','OutSent']
     xlsx_reporter.write_header(header)
@@ -153,6 +153,7 @@ if __name__ == "__main__":
                                 contribution_threshold=conCounter,
                                 ohlc_data=ohlc_data,
                                 sentiment=sentiment,
+                                configfile=configfile,
                             )
                             """
                             strategy.data df now looks like:
@@ -231,7 +232,7 @@ if __name__ == "__main__":
                                 if performance is None:
                                     break
 
-                                if performance['Return'] is not None and performance['Return'] > 0:
+                                if performance['Return'] is not None: # and performance['Return'] > 0:
 
                                     inon = performance['inon'] # inon = buy action performed in what sentiment
                                     outon = performance['outon'] # outon = sell action performed in what sentiment
