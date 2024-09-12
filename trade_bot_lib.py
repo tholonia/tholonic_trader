@@ -34,7 +34,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import csv
 from pprint import pprint
-
+import sys
 
 
 def xprint(text,prettyprint=False):
@@ -391,8 +391,9 @@ def calculate_time_difference(start_date, end_date):
 
 def print_testvarsusage():
     str = f"""
-    Usage: python testvars_fast.py
+    Usage: python testvars_fast.py -c <configfile> | -h for help
     """
+    print(str)
 
 def limit_decimals(number, decimals=2):
     """
@@ -410,6 +411,16 @@ def count_csv_lines(file_path):
         return sum(1 for row in csv.reader(file))
 
 
+def status_line(**kwargs):
+    sentiment = kwargs.get('sentiment', 0)
+    trade_counter = kwargs.get('trade_counter', 0)
+    rolling_window_position = kwargs.get('rolling_window_position', 0)
+    negCounter = kwargs.get('negCounter', 0)
+    limCounter = kwargs.get('limCounter', 0)
+    conCounter = kwargs.get('conCounter', 0)
+    lookCounter = kwargs.get('lookCounter', 0)
+    status_line = f"  S: {sentiment:2d} T:{trade_counter:6d}: W:{rolling_window_position:.0f}  \tn:{fg.LIGHTCYAN_EX}{negCounter:.2f}{fg.RESET}\tl:{fg.LIGHTMAGENTA_EX}{limCounter:.2f}{fg.RESET}\tc:{fg.LIGHTGREEN_EX}{conCounter:.2f}{fg.RESET}\tk:{fg.LIGHTRED_EX}{lookCounter:.0f}{fg.RESET}                "
+    print(status_line, file=sys.stderr, end="\r",flush=True)
 
 
 FCY = fg.CYAN

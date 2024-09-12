@@ -1,0 +1,59 @@
+#!/usr/bin/env python
+
+import pandas as pd
+
+class DataManager:
+    def __init__(self):
+        self.ohlcv_data = None
+        self.indicator_data = None
+        self.signal_data = None
+        self.combined_data = None
+
+    def load_ohlcv_data(self, source):
+        # Load OHLCV data
+        self.ohlcv_data = pd.read_csv(source)  # or other loading method
+        self.ohlcv_data.set_index('timestamp', inplace=True)
+
+    def calculate_indicators(self):
+        # Calculate indicators based on OHLCV data
+        self.indicator_data = pd.DataFrame(index=self.ohlcv_data.index)
+        # Add indicator calculations here
+        self.indicator_data['SMA'] = self.ohlcv_data['close'].rolling(window=20).mean()
+        # Add more indicators as needed
+
+    def generate_signals(self, strategy):
+        # Generate trading signals
+        self.signal_data = pd.DataFrame(index=self.ohlcv_data.index)
+        self.signal_data['signal'] = strategy.generate_signals(self.ohlcv_data, self.indicator_data)
+
+    def combine_data(self):
+        # Combine all data for analysis or backtesting
+        self.combined_data = self.ohlcv_data.join([self.indicator_data, self.signal_data])
+
+    def get_ohlcv_data(self):
+        return self.ohlcv_data
+
+    def get_indicator_data(self):
+        return self.indicator_data
+
+    def get_signal_data(self):
+        return self.signal_data
+
+    def get_combined_data(self):
+        if self.combined_data is None:
+            self.combine_data()
+        return self.combined_data
+
+# Usage example
+data_manager = DataManager()
+data_manager.load_ohlcv_data('path_to_ohlcv_data.csv')
+data_manager.calculate_indicators()
+data_manager.generate_signals(some_strategy)
+
+# Access individual datasets
+ohlcv = data_manager.get_ohlcv_data()
+indicators = data_manager.get_indicator_data()
+signals = data_manager.get_signal_data()
+
+# Access combined dataset for backtesting or analysis
+combined_data = data_manager.get_combined_data()
