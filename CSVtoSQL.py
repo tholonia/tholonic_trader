@@ -1,49 +1,20 @@
 #!/usr/bin/env python
-
-"""
-CSVtoSQL.py: Convert CSV file to SQLite database
-
-This script reads a CSV file and converts it into a SQLite database. It's designed to work
-with strategy results CSV files, typically containing trading strategy performance metrics.
-
-Key features:
-1. Accepts CSV file name as a command-line argument
-2. Creates a SQLite database file with the same name as the input CSV file
-3. Deletes existing database file if it exists
-4. Reads the CSV file using pandas
-5. Preprocesses the data by dropping the 'Time Test Option' column if present
-6. Renames columns to be Python-friendly (removes spaces, converts to lowercase)
-7. Creates a SQLite database and table based on the CSV structure
-8. Inserts the CSV data into the SQLite database
-
-Usage:
-    python CSVtoSQL.py <csv_file_name>
-
-Arguments:
-    csv_file_name: Name of the CSV file to be converted
-
-Output:
-    A SQLite database file (.db) with the same name as the input CSV file
-
-Dependencies:
-    - pandas
-    - sqlalchemy
-
-Note: This script assumes a specific structure for the input CSV file, typically
-containing trading strategy results. Modify the script if your CSV structure differs.
-"""
-
 import pandas as pd
 import os
 import sys
-from sqlalchemy import create_engine, Column, Float, Integer, String
+from sqlalchemy import create_engine, Column, Float, Integer, String, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import SQLAlchemyError
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Check if CSV file name is provided as command-line argument
 if len(sys.argv) < 2:
-    print("Please provide the CSV file name as a command-line argument.")
-    print("Usage: python script_name.py your_csv_file.csv")
+    logging.error("Please provide the CSV file name as a command-line argument.")
+    logging.error("Usage: python script_name.py your_csv_file.csv")
     sys.exit(1)
 
 # Get CSV file name from command-line argument
@@ -55,19 +26,20 @@ db_file = os.path.splitext(csv_file)[0] + '.db'
 # Check if the database file exists and delete it
 if os.path.exists(db_file):
     os.remove(db_file)
-    print(f"Existing database '{db_file}' has been deleted.")
+    logging.info(f"Existing database '{db_file}' has been deleted.")
 
 # Read the CSV file
 try:
     df = pd.read_csv(csv_file)
+    logging.info(f"Successfully read CSV file '{csv_file}'. Shape: {df.shape}")
 except FileNotFoundError:
-    print(f"Error: The file '{csv_file}' was not found.")
+    logging.error(f"Error: The file '{csv_file}' was not found.")
     sys.exit(1)
 except pd.errors.EmptyDataError:
-    print(f"Error: The file '{csv_file}' is empty.")
+    logging.error(f"Error: The file '{csv_file}' is empty.")
     sys.exit(1)
 except Exception as e:
-    print(f"An error occurred while reading the file: {str(e)}")
+    logging.error(f"An error occurred while reading the file: {str(e)}")
     sys.exit(1)
 
 # Drop the 'Time Test Option' column if it exists
@@ -78,29 +50,30 @@ if 'Time Test Option' in df.columns:
 df.columns = df.columns.str.replace(' ', '_').str.lower()
 
 # Create a SQLite database
-engine = create_engine(f'sqlite:///{db_file}', echo=True)
+engine = create_engine(f'sqlite:///{db_file}', echo=False)
 
 # Create a base class for declarative class definitions
 Base = declarative_base()
 
-# Define the table structure
+# Define the table structure dynamically based on CSV columns
 class TradeData(Base):
     __tablename__ = 'trade_data'
-
     id = Column(Integer, primary_key=True)
-    negotiation_threshold = Column(Float)
-    limitation_multiplier = Column(Float)
-    contribution_threshold = Column(Float)
-    lookback_period = Column(Integer)
-    total_return = Column(Float)
-    number_of_trades = Column(Integer)
-    win_rate = Column(Float)
-    staroverhodl = Column(Float)
-    entry_sentiment = Column(String)
-    exit_sentiment = Column(String)
+
+    # Dynamically add columns based on CSV structure
+    for column in df.columns:
+        if column.lower() in ['fromdate', 'todate']:
+            locals()[column.lower()] = Column(String)  # Changed to String for flexibility
+        elif df[column].dtype == 'float64':
+            locals()[column.lower()] = Column(Float)
+        elif df[column].dtype == 'int64':
+            locals()[column.lower()] = Column(Integer)
+        else:
+            locals()[column.lower()] = Column(String)
 
 # Create the table
 Base.metadata.create_all(engine)
+logging.info("Database table created successfully.")
 
 # Create a session
 Session = sessionmaker(bind=engine)
@@ -110,12 +83,31 @@ session = Session()
 data = df.to_dict('records')
 
 # Insert data into the database
-for record in data:
-    trade_data = TradeData(**record)
-    session.add(trade_data)
+try:
+    for i, record in enumerate(data):
+        trade_data = TradeData(**record)
+        session.add(trade_data)
+        if (i + 1) % 1000 == 0:  # Log progress every 1000 records
+            logging.info(f"Inserted {i + 1} records...")
 
-# Commit the changes and close the session
-session.commit()
-session.close()
+    session.commit()
+    logging.info(f"All {len(data)} records inserted successfully.")
+except SQLAlchemyError as e:
+    session.rollback()
+    logging.error(f"An error occurred while inserting data: {str(e)}")
+    sys.exit(1)
+finally:
+    session.close()
 
-print(f"Data from '{csv_file}' has been successfully imported into the new SQL database '{db_file}'.")
+# Verify data insertion
+verify_engine = create_engine(f'sqlite:///{db_file}', echo=False)
+verify_session = sessionmaker(bind=verify_engine)()
+count = verify_session.query(TradeData).count()
+verify_session.close()
+
+if count == len(data):
+    logging.info(f"Data verification successful. {count} records found in the database.")
+else:
+    logging.warning(f"Data verification failed. Expected {len(data)} records, but found {count} in the database.")
+
+print(f"Data from '{csv_file}' has been processed. Check the logs for details.")

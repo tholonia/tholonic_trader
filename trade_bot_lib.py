@@ -28,14 +28,23 @@ from colorama import Fore as fg, Back as bg
 from collections import OrderedDict
 from ExcelReporterClass import ExcelReporter
 # from DataLoaderClass import DataLoader
-from TholonicStrategyClass import TholonicStrategy
-from ProfitLossPlotterClass import ProfitLossPlotter
+# from TholonicStrategyClass import TholonicStrategy
+# from ProfitLossPlotterClass import ProfitLossPlotter
 from datetime import datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import csv
+from pprint import pprint
 
 
 
+def xprint(text,prettyprint=False):
+    print("----------------------------------------")
+    if prettyprint:
+        pprint(text)
+    else:
+        print(text)
+    print("----------------------------------------")
+    exit()
 
 def normalize_numeric_values(values):
     numeric_values = [v for v in values if isinstance(v, (int, float))]

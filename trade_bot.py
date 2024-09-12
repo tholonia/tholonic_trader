@@ -42,6 +42,10 @@ import trade_bot_lib as t
 from pprint import pprint
 from TholonicStrategyClass import TholonicStrategy
 from ProfitLossPlotterClass import ProfitLossPlotter
+from DataLoaderClass import DataLoader
+from SentimentClass import OHLCSentimentAnalyzer
+
+import yaml
 
 from colorama import (
     Fore as fg,
@@ -111,11 +115,44 @@ def dynamic_assign(x):
 
     # If no range is found (shouldn't happen with our setup)
     return None, None, None
+
+
+
+#!┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+#!┃ main                                                                    ┃
+#!┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+
 def main(argv):
 
-    trading_pair = "BTCUSD"
-    livemode = False
-    max_positions = 1
+    # Load configuration from YAML file
+    with open('config.yaml', 'r') as config_file: config = yaml.safe_load(config_file)
+
+    # Extract variables for testvars_fast from the config
+    C = config['testvars_fast']
+
+    from_date = C['from_date']
+    to_date = C['to_date']
+    trading_pair = C['trading_pair']
+    livemode = C['livemode']
+    max_positions = C['max_positions']
+    commission_rate = C['commission_rate']
+    initial_balance = C['initial_balance']
+    verbosity_level = C['verbosity_level']
+    limitcount = C['limitcount']
+    stop_loss_percentage = C['stop_loss_percentage']
+    ohlcfile=C['csv_file']
+
+
+
+    # negotiation_threshold=negotiation_threshold,
+    # limitation_multiplier=limitation_multiplier,
+    # contribution_threshold=contribution_threshold,
+    # lookback_period=lookback_period,
+
+
+
+    value_in_assets_held = 0
 
     #! ideal for BTCUSD1h candles for 2024-07-27 - 2024-08-27 KRAKEN
     # negotiation_threshold = 0.5
@@ -129,23 +166,6 @@ def main(argv):
     limitation_multiplier = 0.6
     contribution_threshold = 2.4
     lookback_period = 16
-    stop_loss_percentage = 4.8 # 1%
-
-
-
-
-    commission_rate = 0.001 # 0.1%
-    initial_balance = 1000 # this never gets used as we use the first price as a initial balance
-    verbosity_level = 0
-    limitcount = 720
-    ohlcfile = False #"data//BTCUSD_OHLC_1440_default.csv"
-    from_date = False #"2016-12-10"
-    to_date = False #"2017-12-16"
-
-
-    value_in_assets_held = 0
-
-
 
     try:
         opts, args = getopt.getopt(argv, "hp:bm:n:l:c:k:r:s:i:v:L:F:R:",
@@ -224,7 +244,7 @@ def main(argv):
     last_value_in_assets_held = 0
     hodl_percentage = 0
     last_buy_price = 0
-    last_buy_macd_sentiment = 0
+    # last_buy_macd_sentiment = 0
 
     # Profitability tracking
     profitable_trades = 0
@@ -254,307 +274,282 @@ def main(argv):
 
 
     while True: #! this is the main loop that runs the strategy
+        loopRange = int((t.count_csv_lines(ohlcfile)-1)/ lookback_period)
+        for rolling_window_position in range(loopRange):
+            loader = DataLoader(ohlcfile, from_date, to_date, lookback_period)
+            loader.shift_window(rolling_window_position)
+            ohlc_data = loader.get_data()
 
-        order_submission_status = ""
-        try:
-
-            strategy = TholonicStrategy(
-                trading_pair=trading_pair,
-                negotiation_threshold=negotiation_threshold,
-                limitation_multiplier=limitation_multiplier,
-                contribution_threshold=contribution_threshold,
-                lookback_period=lookback_period,
-                livemode=livemode,
-                livemode_n_elements=livemode_idx_iter+lookback_period,
-                ohlcfile=ohlcfile,
-                from_date=from_date,
-                to_date=to_date,
-            )
-            latest_data = strategy.run_strategy()
-
-
-            negotiation_threshold, limitation_multiplier, contribution_threshold = dynamic_assign(latest_data['macd_sentiment'])
-
-            print(negotiation_threshold, limitation_multiplier, contribution_threshold)
-
-
-            exit()
+            # sentiment_analyzer = OHLCSentimentAnalyzer(apiout)
 
 
 
-            #! to see the current indexes...
-            print(latest_data.index)
+            order_submission_status = ""
+            try:
 
-            # print("-------------------------------------------------------------------- df.info()")
-            # print(latest_data.info())
-            # print("-------------------------------------------------------------------- df.types()")
-            # print(latest_data.dtypes)
-            # print("-------------------------------------------------------------------- df.describe()")
-            # print(latest_data.describe())
-            # print("-------------------------------------------------------------------- df.todict")
-            # pprint(latest_data.to_dict())
-            # print("-------------------------------------------------------------------- df")
-            # pprint(latest_data)
-            # print("-------------------------------------------------------------------- df.index")
-            # print(latest_data.index)
-            # print("-------------------------------------------------------------------- df.values")
-            # print(latest_data.values)
-            # print("-------------------------------------------------------------------- df.head()")
-            # print(latest_data.head())
-            # print("-------------------------------------------------------------------- df.tail()")
-            # print(latest_data.tail())
+                strategy = TholonicStrategy(
+                    trading_pair=trading_pair,
+                    negotiation_threshold=1,
+                    limitation_multiplier=1,
+                    contribution_threshold=1,
+                    lookback_period=lookback_period,
+                    livemode=livemode,
+                    livemode_n_elements=livemode_idx_iter+lookback_period,
+                    # ohlcfile=ohlcfile,
+                    # from_date=from_date,
+                    # to_date=to_date,
+                    ohlc_data=ohlc_data,
+                )
+                latest_data, strategy.data = strategy.run_strategy()
 
-            exit()
+
+                # t.xprint(type(latest_data))
 
 
 
+                avg_volume = latest_data['average_volume']
+                # signal = strategy.generate_signals()
+
+                current_time = f"{latest_data.name}"  # CONVER TO STR
+                current_time_dt = datetime.strptime(current_time, "%Y-%m-%d %H:%M:%S")
+                current_price = latest_data['close']
+                in_date_range = from_date_dt <= current_time_dt <= to_date_dt
+                available_positions = max_positions - len(current_positions)
+                livemode_idx_iter += 1
+
+                # Break when we get to the last date or we read the same record twice or hit the count limit
+                if current_time_dt > to_date_dt or current_time == previous_time or livemode_idx_iter > limitcount:
+                    if current_time_dt > to_date_dt:
+                        print(fg.LIGHTYELLOW_EX + f"Reached end date: {to_date_dt}" + fg.RESET)
+                    if current_time == previous_time:
+                        print(fg.LIGHTYELLOW_EX + f"Reached same record twice as record {livemode_idx_iter}: {current_time}" + fg.RESET)
+                    if livemode_idx_iter > limitcount:
+                        print(fg.LIGHTYELLOW_EX + f"Reached limitcount: {limitcount}" + fg.RESET)
+                    exit()
+                previous_time = current_time
+
+                # Check for stop loss
+                if check_stop_loss(current_positions, current_price, stop_loss_decimal):
+                    signal = "SELL"
+                    if verbosity_level > 1 and verbosity_level < 100:
+                        print(fg.LIGHTYELLOW_EX + f"Stop loss ({stop_loss_percentage:.2f}%) triggered at {current_price:.2f}" + fg.RESET,file=sys.stderr)
 
 
-            avg_volume = latest_data['average_volume']
-            signal = strategy.get_signal()
+                #!┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+                #!┃ BUY                                                                     ┃
+                #!┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+                # Position management
+                if strategy.data['buy_condition'].iloc[-1] == True:
 
-            current_time = f"{latest_data.name}"  # CONVER TO STR
-            current_time_dt = datetime.strptime(current_time, "%Y-%m-%d %H:%M:%S")
-            current_price = latest_data['close']
-            in_date_range = from_date_dt <= current_time_dt <= to_date_dt
-            available_positions = max_positions - len(current_positions)
-            livemode_idx_iter += 1
+                    if (
+                        available_positions > 0 and
+                        in_date_range
+                        # latest_data['macd_sentiment'] < -0.8
 
-            # Break when we get to the last date or we read teh same record twice or hit the count limit
-            if current_time_dt > to_date_dt or current_time == previous_time or livemode_idx_iter > limitcount:
-                if current_time_dt > to_date_dt:
-                    print(fg.LIGHTYELLOW_EX + f"Reached end date: {to_date_dt}" + fg.RESET)
-                if current_time == previous_time:
-                    print(fg.LIGHTYELLOW_EX + f"Reached same record twice as record {livemode_idx_iter}: {current_time}" + fg.RESET)
-                if livemode_idx_iter > limitcount:
-                    print(fg.LIGHTYELLOW_EX + f"Reached limitcount: {limitcount}" + fg.RESET)
-                break
-            previous_time = current_time
-
-            # Check for stop loss
-            if check_stop_loss(current_positions, current_price, stop_loss_decimal):
-                signal = "SELL"
-                if verbosity_level > 1 and verbosity_level < 100:
-                    print(fg.LIGHTYELLOW_EX + f"Stop loss ({stop_loss_percentage:.2f}%) triggered at {current_price:.2f}" + fg.RESET,file=sys.stderr)
+                        ):
+                        #! and latest_data['volatility'] < 1000:
 
 
-            #!┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-            #!┃ BUY                                                                     ┃
-            #!┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-            # Position management
-            if signal == "BUY":
+                        # print(f"\tMACD Signal: {latest_data['macd_signal']}")
+                        # print(f"\tVolatility: {latest_data['volatility']}")
+                        # print(f"\tAverage Volatility: {latest_data['average_volatility']}")
+                        # print(f"\tVR: {latest_data['average_volume']/latest_data['volatility']}")
 
-                print(f">>>> latest_data['macd_sentiment']: {latest_data['macd_sentiment']}")
+                        if initial_price is None:
+                            initial_price = current_price
 
-                if (
-                    available_positions > 0 and
-                    in_date_range and
-                    latest_data['macd_sentiment'] < -0.8
+                        if first_purchase_price is None:
+                            first_purchase_price = current_price
+                            current_capital = first_purchase_price
 
-                    ):
-                    #! and latest_data['volatility'] < 1000:
+                        # Calculate the investment amount for this position.
+                        # Divide the current capital by the remaining available positions.
+                        # This ensures equal distribution of capital across all potential positions.
+                        investment_amount = current_capital / (max_positions - num_positions)
+
+                        # Calculate the number of units to buy based on the investment amount and current price
+                        units_to_buy = investment_amount / current_price
+
+                        # save the buy price.  Should be average buy price if we are averaging
+                        last_buy_price = current_price
+
+                        # Append the current price and the calculated units to the current positions list
+                        current_positions.append((current_price, units_to_buy))
+
+                        # Add the units to the total units held
+                        value_in_assets_held += units_to_buy
+                        last_value_in_assets_held = value_in_assets_held
+
+                        # Set the long_positions flag to True
+                        long_positions = True
+
+                        # Calculate the average position price
+                        avg_position_price = calculate_average_position_price(current_positions)
+
+                        # Add to "Individual Trade Porfits/Losses" to the plotter
+                        if plotting_enabled:
+                            plotter.add_trade(current_time, 0, current_price, 'BUY', available_positions = available_positions)
 
 
-                    # print(f"\tMACD Signal: {latest_data['macd_signal']}")
-                    # print(f"\tVolatility: {latest_data['volatility']}")
-                    # print(f"\tAverage Volatility: {latest_data['average_volatility']}")
-                    # print(f"\tVR: {latest_data['average_volume']/latest_data['volatility']}")
+                        if verbosity_level > 1 and verbosity_level < 100:
+                            print_trading_info(
+                                idx                 =livemode_idx_iter,
+                                timestamp           =current_time,
+                                signal              =signal,
+                                trading_pair        =trading_pair,
+                                close_price         =current_price,
+                                # last_buy_macd_sentiment = last_buy_macd_sentiment,
+                                # macd_sentiment      =latest_data['macd_sentiment'],
+                                # normalized_macd_sentiment      =latest_data['normalized_macd_sentiment'],
 
-                    if initial_price is None:
-                        initial_price = current_price
+                                #
+                                # volatility          =latest_data['volatility'],
+                                # average_volatility  =latest_data['average_volatility'],
+                                # volume              =latest_data['volume'],
+                                # average_volume      =latest_data['average_volume'],
 
-                    if first_purchase_price is None:
-                        first_purchase_price = current_price
-                        current_capital = first_purchase_price
+                                # macd_sig            =latest_data['macd_signal'],
+                                # macd                =latest_data['macd'],
+                                # macd_sigline        =latest_data['macd_signal_line'],
 
-                    # Calculate the investment amount for this position.
-                    # Divide the current capital by the remaining available positions.
-                    # This ensures equal distribution of capital across all potential positions.
-                    investment_amount = current_capital / (max_positions - num_positions)
+                                order_submission_status=order_submission_status,
 
-                    # Calculate the number of units to buy based on the investment amount and current price
-                    units_to_buy = investment_amount / current_price
+                                # HODL_units  =value_in_assets_held,
+                                # long_positions    =long_positions,
+                                # avg_position_price  =avg_position_price,
+                                # total_profit        =total_profit,
+                                # total_profit_pct    =total_profit_percentage,
+                                # num_positions       =num_positions,
 
-                    # save the buy price.  Should be average buy price if we are averaging
-                    last_buy_price = current_price
+                            )
+                        # try:
+                        #     last_buy_macd_sentiment = latest_data['macd_sentiment']
+                        # except Exception as e:
+                        #     last_buy_macd_sentiment = 0
+                    else:
+                        order_submission_status = "unavailable"
 
-                    # Append the current price and the calculated units to the current positions list
-                    current_positions.append((current_price, units_to_buy))
+                #~┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+                #~┃ SELL                                                                    ┃
+                #~┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+                # Handling the SELL signal when there are open positions
 
-                    # Add the units to the total units held
-                    value_in_assets_held += units_to_buy
-                    last_value_in_assets_held = value_in_assets_held
+                # if strategy.data['sell_condition'].iloc[-1] == True:
+                if strategy.data['sell_condition'].iloc[-1] == True and current_positions and in_date_range:
+                    #!and latest_data['macd_sentiment'] - last_buy_macd_sentiment > 0:
+                    #!and latest_data['macd_sentiment'] >= 0.5:
+                    #! and latest_data['volatility'] >= 1000: # and total_units_held > 0:
 
-                    # Set the long_positions flag to True
-                    long_positions = True
+                    # macds_delta = latest_data['macd_sentiment'] - last_buy_macd_sentiment
+                    # print(f">>>> macds_delta: {macds_delta}")
 
-                    # Calculate the average position price
-                    avg_position_price = calculate_average_position_price(current_positions)
+
+                    volatility = latest_data['volatility']
+                    average_volatility = latest_data['average_volatility']
+
+                    # Calculate the profit for closing all positions at the current price, including commission
+                    total_amount = sum(amount for _, amount in current_positions)
+                    profit, profit_percentage = calculate_profit(current_positions, current_price, total_amount, commission_rate)
+
+                    # Update profitability tracking
+                    if profit > 0:
+                        profitable_trades += 1
+                    else:
+                        non_profitable_trades += 1
+
+                    # Add the calculated profit to the total profit
+                    total_profit += profit
+                    total_profit_percentage += profit_percentage
+                    transaction_profit = ((current_price-avg_position_price)/avg_position_price)*100
+
+                    # Update the current capital
+                    current_capital += profit
+                    value_in_assets_held = total_profit/current_price
+
+                    # Close all positions by resetting the current_positions list
+                    current_positions = []
+                    # Update flags to indicate no open positions
+                    long_positions = False
+                    # num_positions = 0
+                    available_positions = max_positions
+                    final_selling_price = current_price
+
 
                     # Add to "Individual Trade Porfits/Losses" to the plotter
+                    #! adding SELL to the add_trade MUST come after calculating available_positions because it uses that to know how
+                    #! many positions were open!
                     if plotting_enabled:
-                        plotter.add_trade(current_time, 0, current_price, 'BUY', available_positions = available_positions)
+                        plotter.add_trade(current_time, profit, current_price, 'SELL',available_positions=available_positions)
 
 
                     if verbosity_level > 1 and verbosity_level < 100:
+                        # basic print-to-screen output for each transaction
                         print_trading_info(
                             idx                 =livemode_idx_iter,
                             timestamp           =current_time,
                             signal              =signal,
                             trading_pair        =trading_pair,
                             close_price         =current_price,
-                            # last_buy_macd_sentiment = last_buy_macd_sentiment,
-                            macd_sentiment      =latest_data['macd_sentiment'],
-                            # normalized_macd_sentiment      =latest_data['normalized_macd_sentiment'],
-
+                            last_buy_price      =last_buy_price,
                             #
-                            # volatility          =latest_data['volatility'],
-                            # average_volatility  =latest_data['average_volatility'],
+                            transaction_profit  =transaction_profit,
+                            total_profit_pct    =total_profit_percentage,
+                            HODL_units          =value_in_assets_held,
+                            # macd_sentiment      =latest_data['macd_sentiment'],
+                            # last_buy_macd_sentiment = last_buy_macd_sentiment,
+                            # macds_delta = macds_delta,
+
+                            # normalized_macd_sentiment      =latest_data['normalized_macd_sentiment'],
+                            #
                             # volume              =latest_data['volume'],
                             # average_volume      =latest_data['average_volume'],
-
+                            # volatility          =volatility,
+                            # average_volatility  =average_volatility,
+                            # #
                             # macd_sig            =latest_data['macd_signal'],
                             # macd                =latest_data['macd'],
                             # macd_sigline        =latest_data['macd_signal_line'],
-
+                            #
                             order_submission_status=order_submission_status,
 
-                            # HODL_units  =value_in_assets_held,
-                            # long_positions    =long_positions,
-                            # avg_position_price  =avg_position_price,
-                            # total_profit        =total_profit,
-                            # total_profit_pct    =total_profit_percentage,
-                            # num_positions       =num_positions,
+                            # avg_position_price=0, # avg_position_price is 0 after selling
+                            # total_profit=total_profit,
+                            # num_positions=num_positions ,
 
                         )
-                    try:
-                        last_buy_macd_sentiment = latest_data['macd_sentiment']
-                    except Exception as e:
-                        last_buy_macd_sentiment = 0
-                else:
-                    order_submission_status = "unavailable"
-
-            #~┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-            #~┃ SELL                                                                    ┃
-            #~┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
-            # Handling the SELL signal when there are open positions
-
-
-            elif signal == "SELL" and current_positions and in_date_range:
-                #!and latest_data['macd_sentiment'] - last_buy_macd_sentiment > 0:
-                #!and latest_data['macd_sentiment'] >= 0.5:
-                #! and latest_data['volatility'] >= 1000: # and total_units_held > 0:
-
-                macds_delta = latest_data['macd_sentiment'] - last_buy_macd_sentiment
-                # print(f">>>> macds_delta: {macds_delta}")
-
-
-                volatility = latest_data['volatility']
-                average_volatility = latest_data['average_volatility']
-
-                # Calculate the profit for closing all positions at the current price, including commission
-                total_amount = sum(amount for _, amount in current_positions)
-                profit, profit_percentage = calculate_profit(current_positions, current_price, total_amount, commission_rate)
-
-                # Update profitability tracking
-                if profit > 0:
-                    profitable_trades += 1
-                else:
-                    non_profitable_trades += 1
-
-                # Add the calculated profit to the total profit
-                total_profit += profit
-                total_profit_percentage += profit_percentage
-                transaction_profit = ((current_price-avg_position_price)/avg_position_price)*100
-
-                # Update the current capital
-                current_capital += profit
-                value_in_assets_held = total_profit/current_price
-
-                # Close all positions by resetting the current_positions list
-                current_positions = []
-                # Update flags to indicate no open positions
-                long_positions = False
-                # num_positions = 0
-                available_positions = max_positions
-                final_selling_price = current_price
-
-
-                # Add to "Individual Trade Porfits/Losses" to the plotter
-                #! adding SELL to the add_trade MUST come after calculating available_positions because it uses that to know how
-                #! many positions were open!
-                if plotting_enabled:
-                    plotter.add_trade(current_time, profit, current_price, 'SELL',available_positions=available_positions)
-
-
-                if verbosity_level > 1 and verbosity_level < 100:
-                    # basic print-to-screen output for each transaction
-                    print_trading_info(
-                        idx                 =livemode_idx_iter,
-                        timestamp           =current_time,
-                        signal              =signal,
-                        trading_pair        =trading_pair,
-                        close_price         =current_price,
-                        last_buy_price      =last_buy_price,
-                        #
-                        transaction_profit  =transaction_profit,
-                        total_profit_pct    =total_profit_percentage,
-                        HODL_units          =value_in_assets_held,
-                        macd_sentiment      =latest_data['macd_sentiment'],
-                        last_buy_macd_sentiment = last_buy_macd_sentiment,
-                        macds_delta = macds_delta,
-
-                        # normalized_macd_sentiment      =latest_data['normalized_macd_sentiment'],
-                        #
-                        # volume              =latest_data['volume'],
-                        # average_volume      =latest_data['average_volume'],
-                        # volatility          =volatility,
-                        # average_volatility  =average_volatility,
-                        # #
-                        # macd_sig            =latest_data['macd_signal'],
-                        # macd                =latest_data['macd'],
-                        # macd_sigline        =latest_data['macd_signal_line'],
-                        #
-                        order_submission_status=order_submission_status,
-
-                        # avg_position_price=0, # avg_position_price is 0 after selling
-                        # total_profit=total_profit,
-                        # num_positions=num_positions ,
-
-                    )
-                    # print(fg.YELLOW + f"Total units held after sell: {total_units_held:.6f}" + fg.RESET)
+                        # print(fg.YELLOW + f"Total units held after sell: {total_units_held:.6f}" + fg.RESET)
+                    else:
+                        pass
                 else:
                     pass
-            else:
-                pass
 
-            # If we've made at least one purchase, update the plotter with the latest data
-            if first_purchase_price is not None:
-                volatility = latest_data['volatility']
-                average_volatility = latest_data['average_volatility']
-                # Add the current trade data to the plotter
-                # Adds ALL closes to the price line (buy and hold line)
-                if plotting_enabled:
-                    plotter.add_trade(current_time, 0, current_price, signal, volatility, average_volatility)
+                # If we've made at least one purchase, update the plotter with the latest data
+                if first_purchase_price is not None:
+                    volatility = latest_data['volatility']
+                    average_volatility = latest_data['average_volatility']
+                    # Add the current trade data to the plotter
+                    # Adds ALL closes to the price line (buy and hold line)
+                    if plotting_enabled:
+                        plotter.add_trade(current_time, 0, current_price, signal, volatility, average_volatility)
 
-            #TODO create a generate_line_report for each transaction
-            # generate_report("line_results.csv",
-            #     trading_pair, negotiation_threshold, limitation_multiplier, contribution_threshold,
-            #     lookback_period, stop_loss_percentage, from_date, to_date, 0,
-            #     profitable_trades, non_profitable_trades, first_purchase_price, final_selling_price,
-            #     total_profit, total_profit_percentage, current_capital, last_value_in_assets_held,
-            #     hodl_percentage, 0, verbosity_level, ohlcfile, "line"
-            # )
+                #TODO create a generate_line_report for each transaction
+                # generate_report("line_results.csv",
+                #     trading_pair, negotiation_threshold, limitation_multiplier, contribution_threshold,
+                #     lookback_period, stop_loss_percentage, from_date, to_date, 0,
+                #     profitable_trades, non_profitable_trades, first_purchase_price, final_selling_price,
+                #     total_profit, total_profit_percentage, current_capital, last_value_in_assets_held,
+                #     hodl_percentage, 0, verbosity_level, ohlcfile, "line"
+                # )
 
-            time.sleep(0.0)  # Wait before next update
+                time.sleep(0.0)  # Wait before next update
 
-        except KeyboardInterrupt:
-            print("Strategy stopped by user.")
-            break
-        except Exception as e:
-            print(f"An error occurred: {e}")
-            traceback.print_exc()
-            exit()
+            except KeyboardInterrupt:
+                print("Strategy stopped by user.")
+                break
+            except Exception as e:
+                print(f"An error occurred: {e}")
+                traceback.print_exc()
+                exit()
 
     # end of while loop
 

@@ -26,6 +26,7 @@ Dependencies:
 - DataLoaderClass: For loading and preprocessing market data
 - trade_bot_vars: For accessing shared variables and configurations
 - colorama: For colored console output
+- toml: For loading TOML configuration files
 
 Note: Ensure all dependencies are installed and properly configured before
 running this script. Refer to the project documentation for setup instructions.
@@ -36,14 +37,18 @@ import numpy as np
 import csv
 import sys
 import getopt
-import sys
 import traceback
 from TholonicStrategyClass import TholonicStrategy
-from DataLoaderClass import DataLoader
-import yaml
+from DataManagerClass import DataManager
+from SentimentClass import OHLCSentimentAnalyzer
+from ExcelReporterClass import ExcelReporter
+import toml
 import trade_bot_lib as t
 import trade_bot_vars as v #! holds global vars
 from colorama import Fore as fg
+from pprint import pprint
+import os
+from openpyxl.utils import get_column_letter
 
 #!┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 #!┃ main                                                                    ┃
@@ -53,95 +58,199 @@ if __name__ == "__main__":
     argv = sys.argv[1:]
 
     try:
-        opts, args = getopt.getopt(argv, "h",["help"])
+        opts, args = getopt.getopt(argv, "h", ["help"])
     except getopt.GetoptError:
-            t.print_testvars_usage()
-            sys.exit(2)
-
+        t.print_testvars_usage()
+        sys.exit(2)
 
     for opt, arg in opts:
         if opt in ("-h", "--help"):
             t.print_testvars_usage()
             sys.exit()
 
+    # Load configuration from TOML file
+    with open('trading_bot_config.toml', 'r') as config_file:
+        config = toml.load(config_file)
 
-    # Load configuration from YAML file
-    with open('config.yaml', 'r') as config_file:
-        config = yaml.safe_load(config_file)
+    # Extract variables from the config
+    csv_file = config['datamanager']['csv_file']
+    from_date = config['datamanager']['start_date']
+    to_date = config['datamanager']['end_date']
 
-    # Extract variables for testvars_fast from the config
-    C = config['testvars_fast']
+    # Strategy parameters
+    rolling_window_size = config['cfg']['lookback_period']
 
-    reportfilename = C['reportfilename']
-    from_date = C['from_date']
-    to_date = C['to_date']
-    csv_file = C['csv_file']
-    rolling_window_size = C['rolling_window_size']
-    max_loops = C['max_loops']
-    negRange = C['negRange']
-    limRange = C['limRange']
-    conRange = C['conRange']
+    # # If testvars_fast section doesn't exist, we'll use default values or add them to the TOML file
+    # if 'testvars_fast' not in config:
+    #     config['testvars_fast'] = {
+    #         'reportfilename': 'testvars_fast_report.csv',
+    #         'max_loops': 1000,
+    #         'negRange': [0.1, 0.5, 1.0],
+    #         'limRange': [1.0, 1.5, 2.0],
+    #         'conRange': [1.0, 1.2, 1.4],
+    #         'kRange': [2, 3, 4]
+    #     }
+    #     # Optionally, you can save the updated config back to the file
+    #     # with open('trading_bot_config.toml', 'w') as config_file:
+    #     #     toml.dump(config, config_file)
+
+
+
+    reportfilename = config['cfg']['reportfilename']
+    max_loops = config['cfg']['max_loops']
+
+
+    # print configuration for verification
+    # print(fg.CYAN + "Configuration:" + fg.RESET)
+    # print(f"CSV File: {csv_file}")
+    # print(f"Date Range: {from_date} to {to_date}")
+    # print(f"Rolling Window Size: {rolling_window_size}")
+    # print(f"Report Filename: {reportfilename}")
+    # print(f"Max Loops: {max_loops}")
+    # print(f"Negotiation Range: {negRange}")
+    # print(f"Limitation Range: {limRange}")
+    # print(f"Contribution Range: {conRange}")
+    # print(f"K Range: {kRange}")
+
+    # print(negRange)
+    # exit()
+
+
 
     limitCounter = 0
     trade_counter = 0
     iterCounter = 0
     entry_price = 0
     exit_price = 0
-    v.position = 0 # set initial buy tracking value to buy (0)
-
-    with open(reportfilename, 'w', newline='') as csvfile:
-        csvwriter = csv.writer(csvfile)
-
-        # Write the header row
-        header = [
-            'FromDate',
-            'ToDate',
-            'Negotiation Threshold',
-            'Limitation Multiplier',
-            'Contribution Threshold',
-            'Lookback Period',
-            'Total Return',
-            'Number of Trades',
-            'Win Rate',
-            'StarOverHodl',
-            'Entry Sentiment',
-            'Exit Sentiment'
-        ]
-        csvwriter.writerow(header)
+    position = 0 # set initial buy tracking value to buy (0)
 
 
-        loopRange = int((t.count_csv_lines(csv_file)-1)/ rolling_window_size)
-        for rolling_window_position in range(loopRange):
-            loader = DataLoader(csv_file, from_date, to_date, rolling_window_size)
-            loader.shift_window(rolling_window_position)
-            ohlc_data = loader.get_data()
-            # Nested loops for parameter combinations
-            for negCounter in np.arange(negRange):
-                for limCounter in np.arange(limRange):
-                    for conCounter in np.arange(conRange):
-                        for lookCounter in [rolling_window_size]: #! this will probably stay at 16, based on tests done
-                            print( f"  {trade_counter:6d}:{rolling_window_position:4d}  \tn:{fg.LIGHTCYAN_EX}{negCounter:01.1f}{fg.RESET}\tl:{fg.LIGHTMAGENTA_EX}{limCounter:01.1f}{fg.RESET}\tc:{fg.LIGHTGREEN_EX}{conCounter:01.1f}{fg.RESET}\tk:{fg.LIGHTRED_EX}{lookCounter:02d}{fg.RESET}                ", file=sys.stderr, end="\r",flush=True)
+    try: os.unlink("output.xlsx")
+    except: pass
+    xlsx_reporter = ExcelReporter("output.xlsx")
+    xlsx_reporter.load_or_create_workbook()
+    header = [
+        'FromDate',
+        'ToDate',
+        'N',
+        'L',
+        'C',
+        'K',
+        'Total Return',
+        'NumTrades',
+        'Win Rate',
+        '%/HODL',
+        'InSent',
+        'OutSent'
+    ]
+    xlsx_reporter.write_header(header)
 
-                            """
-                            The CSV input data looks like:
+    # Add the formula column
+    hold_column = get_column_letter(header.index('%/HODL') + 1)
+    # xlsx_reporter.add_formula_column(get_column_letter(len(header) + 1),f"{hodl_column}{{row}}*1000","Return (%)")
 
-                            timestamp,open,high,low,close,volume
-                            2023-07-27 00:00:00,29298.53,29363.11,29350.88,29355.07,282.21147203
-                            2023-07-27 01:00:00,29335.85,29419.74,29355.07,29400.14,172.24982198
-                            2023-07-27 02:00:00,29344.42,29438.55,29400.14,29426.53,164.70539073
-                            (9529 data lines)
 
-                            """
 
+    # with open(reportfilename, 'w', newline='') as csvfile:
+    #     csvwriter = csv.writer(csvfile)
+
+    #     # Write the header row
+
+    #     csvwriter.writerow(header)
+
+
+
+
+        # loopRange = int((t.count_csv_lines(csv_file)-1)/ rolling_window_size)
+
+
+        # window_count = 46
+
+        # loader = DataLoader(csv_file, from_date, to_date, rolling_window_size)
+
+    loader = DataManager()
+
+
+    loader.data = loader.load_full_csv()
+    # loader.data = loader.load_data() #source='csv', trading_pair='BTCUSD', window_size=rolling_window_size, start_date=from_date, end_date=to_date)
+    # for window in enumerate(loader.create_rolling_window()):
+    print(loader.data)
+
+    # exit()
+    loopRange = loader.get_windows_count()
+    # t.xprint(loopRange)
+
+
+    sentiments_ary = config['simulation'] #! holds the optimal values for each mtype
+
+
+    for rolling_window_position in range(loopRange):
+        # loader = DataLoader(csv_file, from_date, to_date, rolling_window_size)
+        # loader.shift_window(rolling_window_position)
+        ohlc_data = loader.get_rolling_window(window_locations=[rolling_window_position,1])
+        # Nested loops for parameter combinations
+        apiout = True
+        sentiment_analyzer = OHLCSentimentAnalyzer(apiout)
+        sentiment = sentiment_analyzer.analyze(pd.DataFrame(ohlc_data))
+        # liveDebug = False
+        # t.xprint(sentiment)
+
+        negRange = sentiments_ary[str(sentiment)]['negRange']
+        limRange = sentiments_ary[str(sentiment)]['limRange']
+        conRange = sentiments_ary[str(sentiment)]['conRange']
+        kRange = sentiments_ary[str(sentiment)]['kRange']
+
+        # negRange = config['cfg']['negRange']
+        # limRange = config['cfg']['limRange']
+        # conRange = config['cfg']['conRange']
+        # kRange = config['cfg']['kRange']
+
+
+
+
+        for negCounter in np.arange(*negRange):
+            for limCounter in np.arange(*limRange):
+                for conCounter in np.arange(*conRange):
+                    for lookCounter in np.arange(*kRange): #! this will probably stay at 16, based on tests done
+                        # print(negCounter,limCounter,conCounter,lookCounter)
+
+                        # with open('dev.yaml', 'r') as dconfig_file:
+                        #      dconfig = yaml.safe_load(dconfig_file)
+                        # D = dconfig['dev']
+                        # liveDebug = D['debug']
+
+
+                        # print(f"  T:{trade_counter:6d}")
+                        # print(f"  W:{rolling_window_position:.0f}")
+                        # print(f"  n:{fg.LIGHTCYAN_EX}{negCounter:.2f}{fg.RESET}")
+                        # print(f"  l:{fg.LIGHTMAGENTA_EX}{limCounter:.2f}{fg.RESET}")
+                        # print(f"  c:{fg.LIGHTGREEN_EX}{conCounter:.2f}{fg.RESET}")
+                        # print(f"  k:{fg.LIGHTRED_EX}{lookCounter:.0f}{fg.RESET}")
+
+                        """
+                        The CSV input data looks like:
+
+                        timestamp,open,high,low,close,volume
+                        2023-07-27 00:00:00,29298.53,29363.11,29350.88,29355.07,282.21147203
+                        2023-07-27 01:00:00,29335.85,29419.74,29355.07,29400.14,172.24982198
+                        2023-07-27 02:00:00,29344.42,29438.55,29400.14,29426.53,164.70539073
+                        (9529 data lines)
+
+                        """
+                        if sentiment in [1,2,3,6,7,8,9,10]:
+
+
+                            print( f"  S: {sentiment:2d} T:{trade_counter:6d}: W:{rolling_window_position:.0f}  \tn:{fg.LIGHTCYAN_EX}{negCounter:.2f}{fg.RESET}\tl:{fg.LIGHTMAGENTA_EX}{limCounter:.2f}{fg.RESET}\tc:{fg.LIGHTGREEN_EX}{conCounter:.2f}{fg.RESET}\tk:{fg.LIGHTRED_EX}{lookCounter:.0f}{fg.RESET}                ", file=sys.stderr, end="\r",flush=True)
                             strategy = TholonicStrategy(
-                                trading_pair="BTCUSD",
+                            #     # trading_pair="BTCUSD",
                                 negotiation_threshold=negCounter,
                                 limitation_multiplier=limCounter,
                                 contribution_threshold=conCounter,
-                                lookback_period=lookCounter,
-                                livemode=False,
-                                livemode_n_elements=lookCounter,
+                                # lookback_period=lookCounter,
+                                # livemode=False,
+                                # livemode_n_elements=lookCounter,
                                 ohlc_data=ohlc_data,
+                                sentiment=sentiment,
                             )
                             # strategy.data df now looks like:
                             """
@@ -154,7 +263,17 @@ if __name__ == "__main__":
                             2023-07-27 04:00:00  29403.56  29491.05  29403.57  29484.50  157.321089
 
                             """
-                            strategy.run_strategy()
+                            strategy.run_strategy()  # original CPU code
+
+                            # with original CPU code: 2m30s to process 1 window; 550 windows = 23 hrs
+                            # with torch and gpu:     1m45s to process 1 window; 550 windows = 16 hrs
+                            # with torch and no gpu:  1m55s to process 1 window; 550 windows = 18 hrs
+
+                            # strategy.run_strategy_torch() #! mangles the buy_condition values
+
+                            # print(strategy.data)
+                            # print(strategy.data['sentiment'])
+
                             #the df now looks like
                             """
                                                     open      high       low     close      volume  price_change  average_volume  volatility  average_volatility  negotiation_condition  limitation_condition  contribution_condition  buy_condition  sell_condition  sentiment
@@ -188,7 +307,14 @@ if __name__ == "__main__":
 
                             """
 
-                            trades = strategy.backtest()
+                            # tradeds can have multiple buys and sells within the window, so it's a list of dicts
+                            trades, position = strategy.backtest()
+
+                            # pprint(trades)
+                            # print(trades)
+                            # input("Press Enter to continue...")
+                            # print(len(trades))
+                            # print("==========================================================================================")
 
                             """
                             trades_df, when not False, is a dataframe of the dict:
@@ -202,48 +328,70 @@ if __name__ == "__main__":
                                     'exit_sentiment': 1
                                 }
                             """
+                            # print("----------------------------------------------------------------------",    len(trades))
 
-                            if len(trades) <6: # there must be 6 fields, otherwise something went wrong, so break
-                                break
-                            else:
+
+
+
+                            # if len(trades) > 0:
+                            #     break
+                            # else:
+                            # print(trades, len(trades))
+
+                            for trade in trades:
+                                # print(trade)
                                 trade_counter += 1
-                                trades_df =pd.DataFrame(trades)
+                                trades_df =pd.DataFrame(trade,index=[0])
 
-                            try:
-                                # n,l,c numbers too small or big will cause errors
+                                # try:
+                                #     # n,l,c numbers too small or big will cause errors
                                 performance = strategy.calculate_performance(trades_df) # this is a dict
-                            except Exception as e:
-                                break
+                                if performance is None:
+                                    break
+                                # else:
+                                #     print(performance)
 
-
-                            try:
+                                # print(liveDebug)
+                                # if liveDebug:
+                                #     print(123)
+                                #     print(performance)
                                 #! limit the transactions to meet a minimum return
                                 # min_return = (len(trades) * 0.006)
                                 # if performance['Return'] > min_return: #0.2: # 2.5:
-
+                                # print(performance['Return'])
                                 if performance['Return'] is not None and performance['Return'] > 0:
-                                    try:
+                                    # print(performance['Return'])
+                                    # try:
                                         # Prepare the row data
 
-                                        inon = performance['inon']
-                                        outon = performance['outon']
-                                        row = [
-                                            f"{from_date}",
-                                            f"{to_date}",
-                                            f"{negCounter:.1f}",
-                                            f"{limCounter:.1f}",
-                                            f"{conCounter:.1f}",
-                                            f"{lookCounter:02d}",
-                                            f"{performance['Return']:.5f}",
-                                            f"{performance['Trades']:.0f}",
-                                            f"{performance['Profit']:.5f}",
-                                            f"{performance['StratOverHodl']:.5f}",
-                                            f"{inon}",
-                                            f"{outon}",
-                                            ]
+                                    inon = performance['inon']
+                                    outon = performance['outon']
+                                    row = [
+                                        f"{trades_df['entry_date'].to_string()}",
+                                        f"{trades_df['exit_date'].to_string()}",
+                                        f"{negCounter:.2f}",
+                                        f"{limCounter:.2f}",
+                                        f"{conCounter:.2f}",
+                                        f"{lookCounter:.0f}",
+                                        f"{performance['Return']:.5f}",
+                                        f"{performance['Trades']:.0f}",
+                                        f"{performance['Profit']:.5f}",
+                                        f"{performance['StratOverHodl']:.5f}",
+                                        f"{inon}",
+                                        f"{outon}",
+                                        ]
 
-                                        # Write the row to the CSV file
-                                        csvwriter.writerow(row)
+                                    xlsx_reporter.append_row(row)
+                                    xlsx_reporter.adjust_column_width()
+                                    xlsx_reporter.add_table()
+                                    xlsx_reporter.save()
+
+                            #! add these to the xslx sheet
+                            #~ =M1*(J2+1), =+N1*(G2+1)
+
+                                    # Write the row to the CSV file
+                                    # print(row)
+                                    # csvwriter.writerow(row)
 
 
                                         # Optional: Print the row to console
@@ -253,27 +401,24 @@ if __name__ == "__main__":
                                         # except:
                                         #     pass
 
-                                    except Exception as e:
-                                        pass
-                                        # print(f"An error occurred: {e}")
-                                        # traceback.print_exc()
-                                        # exit()
+                                    # except Exception as e:
+                                    #     pass
+                                    #     # print(f"An error occurred: {e}")
+                                    #     # traceback.print_exc()
+                                    #     # exit()
                                     iterCounter += 1
                                     #! use this for short testing
                                     if limitCounter > max_loops:
                                         exit()
-                            except TypeError as e:
-                                pass
-                                # print(f"[{iterCounter}] Variable out of Scope: {e}",end="\r")
-                                # traceback.print_exc()
-                                # exit()
-                                # print(fg.RED+f"\n [OOS]  n: {negCounter:01.1f}\tl:{limCounter:01.1f}\tc:{conCounter:01.1f}\tL:{lookCounter:02d}\n"+fg.GREEN, file=sys.stderr, end="\r")
-
-
-
-                            except Exception as e:
-                                print(f"An error occurred: {e}")
-                                traceback.print_exc()
-                                exit()
-                                pass
+                                # except TypeError as e:
+                                #     pass
+                                #     # print(f"[{iterCounter}] Variable out of Scope: {e}",end="\r")
+                                #     # traceback.print_exc()
+                                #     # exit()
+                                #     # print(fg.RED+f"\n [OOS]  n: {negCounter:01.1f}\tl:{limCounter:01.1f}\tc:{conCounter:01.1f}\tL:{lookCounter:02d}\n"+fg.GREEN, file=sys.stderr, end="\r")
+                                # except Exception as e:
+                                #     print(f"An error occurred: {e}")
+                                #     traceback.print_exc()
+                                #     exit()
+                                #     pass
     print(f"Results have been written to {reportfilename} [{iterCounter}]")
