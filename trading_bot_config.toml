@@ -1,5 +1,5 @@
 [datamanager]
-source = "csv" # 'cvs' or 'exchange'
+source = "csv" # 'csv' or 'exchange'
 exchange = "coinbase" # 'coinbase' or 'kraken'
 
 trading_pair = "BTCUSD"
@@ -12,18 +12,11 @@ csv_file = "/home/jw/src/cbot/data/BTC_USD_OHLC_60_20230727_20240827.csv"
 mtype_includes = [1,2,3,4,8,10]
 
 [cfg]
-    # exchange = "coinbase"
-    # from_date = "2023-07-27 00:00:00"
-    # to_date = "2024-08-27 00:00:00"
-    #rolling_window_size = 16
-
-max_loops = 10000
+max_loops = 100000
 max_positions = 1 # no pyramiding
-    #trading_pair = "BTCUSD"
 commission_rate = 0.001
 initial_balance = 1000
 stop_loss_percentage = 4.8
-    #lookback_period = 16
 
 negRange = [0.0,   1.0,    0.1] # default for backtesting
 limRange = [0.0,   1.0,    0.1] # default for backtesting
@@ -60,7 +53,6 @@ kRange   = [16.0, 17.0, 1000.0] # default for backtesting
 [exchange]
 crypto_symbol = "BTC"
 base_symbol = "USD"
-     #from_date = 16
 to_date = "NOW"
 granularity = 3600 # 1hr in seconds, 60 in minutes, 3600 in hours
 

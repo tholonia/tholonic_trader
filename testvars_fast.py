@@ -20,6 +20,7 @@ import trade_bot_lib as t
 from colorama import Fore as fg
 from pprint import pprint
 import os
+import openpyxl
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import numbers
 # from GlobalsClass import trade_counter
@@ -91,8 +92,8 @@ if __name__ == "__main__":
         'idx',
         'FromDate',
         'ToDate',
-        'EntryPrice',
-        'ExitPrice',
+        'entry_price',
+        'exit_price',
         'N',
         'L',
         'C',
@@ -105,10 +106,11 @@ if __name__ == "__main__":
         'exit_sentiment',
         'price_change',
         'trend',
-        '% avg_body_size',
-        '% avg_upper_wick',
-        '% avg__lower_wick',
-        '% volatility',
+        'avg_body_size',
+        'avg_upper_wick',
+        'avg_lower_wick',
+        'volatility',
+        # 'norm_close',
     ]
     xlsx_reporter.write_header(header)
 
@@ -249,7 +251,7 @@ if __name__ == "__main__":
                                     dtype: object
 
                             """
-                            strategy, trade_counter = strategy.backtest()  # updates strategy.trades[] with appended trades
+                            strategy, trade_counter = strategy.backtest(sentiment_metadata_ary)  # updates strategy.trades[] with appended trades
                             #! check here for an existing exit_date, and break if it doesn;t exist
                             if 'exit_date' in strategy.trades.columns and not strategy.trades.empty:
                                 # Get the last 'exit_date' value
@@ -282,6 +284,13 @@ if __name__ == "__main__":
                             """
 
                             if last_trade_counter != trade_counter: # this avoids registering buys that exceed position limit of 1
+
+                                if trade_counter == 0:
+                                    print("No Trades!")
+                                    exit()
+                                # else:
+                                #     print(f"{trade_counter} trades")
+
                                 try:
                                     t.status_line(
                                         sentiment=sentiment,
@@ -295,6 +304,7 @@ if __name__ == "__main__":
                                         enter_date=str(strategy.trades['entry_date'].iloc[-1]),
                                     )
                                     last_trade_counter = trade_counter
+
                                     row = [
                                         iterCounter,
                                         f"{strategy.trades['entry_date'].iloc[-1]}",
@@ -317,49 +327,47 @@ if __name__ == "__main__":
                                         sentiment_metadata_ary['average_upper_wick'],
                                         sentiment_metadata_ary['average_lower_wick'],
                                         sentiment_metadata_ary['volatility'],
+                                        # 0, #sentiment_metadata_ary['norm_close'],
                                     ]
-
                                     all_rows.append(row)
-                                    batch_size = 100  # Adjust based on your needs
-                                    if iterCounter % batch_size == 0:
-                                        # Write the current batch to Excel
-                                        batch_df = pd.DataFrame(all_rows, columns=header)
-                                        if os.path.exists(testvars_report_filename):
-                                            # Append to existing file
-                                            with pd.ExcelWriter(testvars_report_filename, mode='a', engine='openpyxl', if_sheet_exists='overlay') as writer:
-                                                # Get the last row in the existing Excel sheet
-                                                startrow = writer.sheets['Sheet1'].max_row
-                                                batch_df.to_excel(writer, index=False, header=False, startrow=startrow)
-                                        else:
-                                            # File does not exist, create it and write the header
-                                            with pd.ExcelWriter(testvars_report_filename, mode='w', engine='openpyxl') as writer:
-                                                batch_df.to_excel(writer, index=False, header=True)
-                                        # Clear the batch
-                                        all_rows = []
-
-
-                                    #! add these two columns to the xslx sheet
-                                    #~ =M1*(J2+1), =N1*(G2+1)
+                                    all_rows = xlsx_reporter.batch_write(all_rows, header,batch_size=100)
                                 except Exception as e:
                                     # pass
                                     print(f"Error in status_line: {e}")
 
 
-                        if iterCounter > max_loops or iterCounter >= csv_lines-rolling_window_position:
+                        if line_counter > max_loops or line_counter >= csv_lines-rolling_window_position:
+                            # After all data processing and just before writing to Excel
+
+
                             xlsx_reporter = ExcelReporter(testvars_report_filename)
                             xlsx_reporter.load_or_create_workbook()
+
+                            try:
+                                xlsx_reporter.set_column_format("trx_return", "0.00%")
+                                xlsx_reporter.set_column_format("cum_return", "0.00%")
+                                xlsx_reporter.set_column_format("trx_overhodl", "0.00%")
+                                xlsx_reporter.set_column_format("cum_overhodl", "0.00%")
+                                xlsx_reporter.set_column_format("entry_price", "$0")
+                                xlsx_reporter.set_column_format("exit_price", "$0")
+                                xlsx_reporter.set_column_format("price_change", "0.00%")
+                                xlsx_reporter.set_column_format("volatility", "0.0000")
+                                xlsx_reporter.set_column_format("avg_body_size", "0.00%")
+                                xlsx_reporter.set_column_format("avg_upper_wick", "0.00%")
+                                xlsx_reporter.set_column_format("avg_lower_wick", "0.00%")
+                                xlsx_reporter.set_column_format("trend", "0.000")
+                            except ValueError as e:
+                                print(f"Error: {e}")
+
                             xlsx_reporter.adjust_column_width()
-                            xlsx_reporter.set_column_format("J","0.00%")
-                            xlsx_reporter.set_column_format("K","0.00%")
-                            xlsx_reporter.set_column_format("L","0.00%")
-                            xlsx_reporter.set_column_format("M","0.00%")
-                            xlsx_reporter.set_column_format("D","$0")
-                            xlsx_reporter.set_column_format("E","$0")
                             xlsx_reporter.add_table()
                             xlsx_reporter.save()
-                            exit()
-                        iterCounter += 1
 
+
+                            # add additional columns here
+                            # add a normalized value (to the cum_overhodl column) for closing price so as to compare on the chart
+                            xlsx_reporter.add_norm_close_column(testvars_report_filename)
+                            exit()
 
 
     print(f"Results have been written to {testvars_report_filename} [{iterCounter}]")

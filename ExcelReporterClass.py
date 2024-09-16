@@ -36,9 +36,12 @@ Note: Ensure openpyxl is installed before using this class.
 
 import os
 from openpyxl import Workbook, load_workbook
+import openpyxl
 from openpyxl.styles import PatternFill
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
+import pandas as pd
+from openpyxl.utils import get_column_letter, column_index_from_string
 
 class ExcelReporter:
     def __init__(self, file_name="line_results.xlsx"):
@@ -48,7 +51,132 @@ class ExcelReporter:
         self.load_or_create_workbook()
 
 
+
+    def batch_write(self, all_rows, header, batch_size=20):
+        """
+        Write data to Excel in batches.
+
+        :param all_rows: List of rows to write
+        :param header: List of column headers
+        :param batch_size: Number of rows to write in each batch (default 100)
+        """
+        if len(all_rows) >= batch_size:
+            batch_df = pd.DataFrame(all_rows, columns=header)
+            # print("------------------------------------------",batch_df)
+            if os.path.exists(self.file_name):
+                with pd.ExcelWriter(self.file_name, mode='a', engine='openpyxl', if_sheet_exists='overlay') as writer:
+                    startrow = writer.sheets['Sheet1'].max_row
+                    batch_df.to_excel(writer, index=False, header=False, startrow=startrow)
+            else:
+                with pd.ExcelWriter(self.file_name, mode='w', engine='openpyxl') as writer:
+                    batch_df.to_excel(writer, index=False, header=True)
+            return []  # Clear the batch
+        return all_rows  # Return unchanged if batch size not reached
+
+    def add_norm_close_column(self, testvars_report_filename):
+            # Load the existing Excel file
+            df = pd.read_excel(testvars_report_filename)
+
+            # Identify the correct column names
+            entry_price_col = 'entry_price'  # Update this if different
+            cum_overhodl_col = 'cum_overhodl'  # Update this if different
+
+            # Calculate 'norm_close'
+            entry_price_min = df[entry_price_col].min()
+            entry_price_max = df[entry_price_col].max()
+            cum_overhodl_min = df[cum_overhodl_col].min()
+            cum_overhodl_max = df[cum_overhodl_col].max()
+
+            if entry_price_max != entry_price_min and cum_overhodl_max != cum_overhodl_min:
+                df['norm_close'] = (
+                    (df[entry_price_col] - entry_price_min) / (entry_price_max - entry_price_min)
+                    * (cum_overhodl_max - cum_overhodl_min)
+                    + cum_overhodl_min
+                )
+            else:
+                df['norm_close'] = df[entry_price_col]
+
+            # Load the existing workbook
+            workbook = openpyxl.load_workbook(testvars_report_filename)
+
+            # Get the active worksheet
+            worksheet = workbook.active
+
+            # Add the new column header
+            new_col = worksheet.max_column + 1
+            worksheet.cell(row=1, column=new_col, value='norm_close')
+
+            # Add the 'norm_close' values
+            for i, value in enumerate(df['norm_close'], start=2):
+                worksheet.cell(row=i, column=new_col, value=value)
+
+            # Format the new 'norm_close' column
+            new_col_letter = get_column_letter(new_col)
+            for cell in worksheet[new_col_letter]:
+                cell.number_format = '0.00'
+
+            # Adjust column width for the new column
+            worksheet.column_dimensions[new_col_letter].width = 15
+
+            # Save the changes
+            workbook.save(testvars_report_filename)
+
+            print(f"Updated {testvars_report_filename} with 'norm_close' column")
+
     def set_column_format(self, column, number_format):
+        """
+        Set the number format for an entire column.
+
+        :param column: Column name
+        :param number_format: Number format code (e.g., '0.00%', '$#,##0.00')
+        """
+        # print("Available columns:")
+        # for idx, cell in enumerate(self.ws[1], start=1):
+        #     print(f"- Column {get_column_letter(idx)}: {cell.value}")
+
+        # Find the column letter by name
+        for idx, cell in enumerate(self.ws[1], start=1):
+            if cell.value and str(cell.value).strip().lower() == column.strip().lower():
+                col_letter = get_column_letter(idx)
+                break
+        else:
+            raise ValueError(f"Column '{column}' not found. Please check the column names printed above.")
+
+        # Apply the number format to the entire column
+        for row in range(2, self.ws.max_row + 1):  # Start from row 2 to skip header
+            self.ws[f"{col_letter}{row}"].number_format = number_format
+
+        # print(f"Format applied to column {col_letter} ({column})")
+
+
+    def XXXset_column_format(self, column, number_format):
+        """
+        Set the number format for an entire column.
+
+        :param column: Column name or letter
+        :param number_format: Number format code (e.g., '0.00%', '$#,##0.00')
+        """
+        # # Print all column names for debugging
+        # print("Available columns:")
+        # for cell in self.ws[1]:
+        #     print(f"- {cell.value}")
+
+        if column.isalpha():
+            col_letter = column.upper()
+        else:
+            # Find the column letter by name
+            for idx, col in enumerate(self.ws[1], start=1):
+                if col.value and col.value.strip().lower() == column.strip().lower():
+                    col_letter = get_column_letter(idx)
+                    break
+            else:
+                raise ValueError(f"Column '{column}' not found. Please check the column names printed above.")
+
+        col = self.ws[col_letter]
+        for cell in col[2:]:  # Skip the header row
+            cell.number_format = number_format
+
+    def xxset_column_format(self, column, number_format):
         """
         Set the number format for an entire column.
 

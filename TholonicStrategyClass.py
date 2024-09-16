@@ -28,8 +28,9 @@ import datetime
 from GlobalsClass import (
     # LastBuyDate,
     # LastSellDate,
-    lsd_list,
-    lbd_list,
+    last_sell_date_list,
+    last_buy_date_list,
+    last_buy_price_list,
     positions,
     trades_list,
     trade_counter,
@@ -312,8 +313,8 @@ class TholonicStrategy:
 
 
 
-    def backtest(self):
-        global positions,lbd_list,lsd_list, trades_list, trade_counter, cum_return, cum_overhodl
+    def backtest(self,sentiment_metadata_ary):
+        global positions,last_buy_date_list,last_sell_date_list, last_buy_price_list, trades_list, trade_counter, cum_return, cum_overhodl
 
         # trades_list is already a global list of trades
 
@@ -335,12 +336,22 @@ class TholonicStrategy:
 
         # Determine whether to execute a buy order
 
+        #! tis just make it 4x worse
+        # # if last volatility was extreme, could be sign of a dump, so take a break
+        # dump_alert_wait = 0
+        # if sentiment_metadata_ary['volatility'] >= 0.07:
+        #     print(bg.RED+fg.LIGHTYELLOW_EX+"DUMP ALERT"+fg.RESET+bg.RESET)
+        #     if dump_alert_wait < 1: dump_alert_wait = 5
+        #     else: dump_alert_wait -= 1
+
+
 
         doBuy = (
             positions == 0 and
             isBuy
-            and last_i > lsd_list[-1]
-            and last_i > lbd_list[-1]
+            and last_i > last_sell_date_list[-1]
+            and last_i > last_buy_date_list[-1]
+            # and dump_alert_wait < 1
         )
 
         if doBuy:
@@ -354,7 +365,8 @@ class TholonicStrategy:
             # t.xprint("BOUGHT",f"BOUGHT",co=fg.LIGHTRED_EX, ex=False)
 
             trades_list.append(trade_entry)
-            lbd_list.append(last_i)
+            last_buy_date_list.append(last_i)
+            last_buy_price_list.append(last_close)
 
         # Determine whether to execute a sell order
         doSell = (
@@ -364,14 +376,17 @@ class TholonicStrategy:
             # and ttime > lbd_list[-1] # Ensures sell does not occur on the same timestamp as the last buy
         )
 
-        # force doSell override is stop loss limit is exceeded
-        entry_price = trades_list[-1]['entry_price']
-        trx_return =  (last_close - entry_price) / entry_price
+        try:
+            entry_price = trades_list[-1]['entry_price']
+            trx_return =  (last_close - entry_price) / entry_price
 
-        if trx_return < -(self.stop_loss_percentage/100):
-            doSell = True
-            print(bg.RED+fg.LIGHTYELLOW_EX+"STOP LOSS"+fg.RESET+bg.RESET)
-
+            # force doSell override if stop loss limit is exceeded
+            if trx_return < -(self.stop_loss_percentage/100):
+                doSell = True
+                last_close = last_buy_price_list[-1] * (1 - self.stop_loss_percentage/100)
+                print(bg.RED+fg.LIGHTYELLOW_EX+"STOP LOSS"+fg.RESET+bg.RESET)
+        except:
+            doSell = False
         # # do NOT sell when entry_sent = 1 AND exit_sent = 2
         # entry_sent = trades_list[-1]['entry_sentiment']
         # exit_sent  = sentiment
@@ -407,7 +422,7 @@ class TholonicStrategy:
             trade_counter += 1
             # print("trade_counter",trade_counter)
             trades_list[-1].update(trade_exit)
-            lsd_list.append(last_i)
+            last_sell_date_list.append(last_i)
         # convert back the the nightmare that is dataframes
         self.trades = pd.DataFrame(trades_list)
 
