@@ -314,29 +314,32 @@ class TholonicStrategy:
 
 
     def backtest(self,sentiment_metadata_ary):
-        global positions,last_buy_date_list,last_sell_date_list, last_buy_price_list, trades_list, trade_counter, cum_return, cum_overhodl
-
-        # trades_list is already a global list of trades
+        global positions
+        global last_buy_date_list
+        global last_sell_date_list
+        global last_buy_price_list
+        global trades_list
+        global trade_counter
+        global cum_return
+        global cum_overhodl
 
 
         # Get the last index from the data
         first_i = self.data.index[0]
         first_row = self.data.loc[first_i]
-
+        # Get last row
         last_i = self.data.index[-1]
         last_row = self.data.loc[last_i]
 
-        ttime = last_row['timestamp'].timestamp() # unix timestamp
-        strtime = t.ts2str(ttime)
-        sentiment = last_row['sentiment']
-        first_close = first_row['close']
-        last_close = last_row['close']
-        isBuy = last_row['buy_condition']
-        isSell = last_row['sell_condition']
+        first_close  = first_row['close']
+        sentiment    = last_row['sentiment']
+        last_close   = last_row['close']
+        isBuy        = last_row['buy_condition']
+        isSell       = last_row['sell_condition']
 
         # Determine whether to execute a buy order
 
-        #! tis just make it 4x worse
+        #! this just makes it 4x worse :/
         # # if last volatility was extreme, could be sign of a dump, so take a break
         # dump_alert_wait = 0
         # if sentiment_metadata_ary['volatility'] >= 0.07:
@@ -344,36 +347,41 @@ class TholonicStrategy:
         #     if dump_alert_wait < 1: dump_alert_wait = 5
         #     else: dump_alert_wait -= 1
 
-
+        #!┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+        #!┃ BUY                                                                     ┃
+        #!┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
         doBuy = (
-            positions == 0 and
-            isBuy
-            and last_i > last_sell_date_list[-1]
-            and last_i > last_buy_date_list[-1]
+            positions == 0 # no pyramiding allowed
+            and isBuy
+            and last_i > last_sell_date_list[-1] # make sure this is a buy after a sell
+            and last_i > last_buy_date_list[-1] # make sure this is a new buy
             # and dump_alert_wait < 1
         )
 
         if doBuy:
             positions += 1
 
+            # storethe entire buy/sell tranactions in an array, and store that array in a list
             trade_entry = {
                 'entry_date': last_i,  #! <class 'pandas._libs.tslibs.timestamps.Timestamp'>
                 'entry_price': last_close,
                 'entry_sentiment': sentiment,
             }
-            # t.xprint("BOUGHT",f"BOUGHT",co=fg.LIGHTRED_EX, ex=False)
 
             trades_list.append(trade_entry)
-            last_buy_date_list.append(last_i)
-            last_buy_price_list.append(last_close)
+            last_buy_date_list.append(last_i) # keep a record of the date of the last buy date
+            last_buy_price_list.append(last_close) # keep a record of the price of the last buy_price
 
+        #!┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+        #!┃ SELL                                                                    ┃
+        #!┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
         # Determine whether to execute a sell order
         doSell = (
             len(trades_list) > 0
             and positions == 1
             and isSell
-            # and ttime > lbd_list[-1] # Ensures sell does not occur on the same timestamp as the last buy
+            and ttime > lbd_list[-1] # Ensures sell does not occur on the same timestamp as the last buy
         )
 
         try:
