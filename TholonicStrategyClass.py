@@ -24,24 +24,77 @@ import torch
 import torch.nn.functional as F
 import trade_bot_lib as t
 import toml
+import datetime
+from GlobalsClass import (
+    # LastBuyDate,
+    # LastSellDate,
+    lsd_list,
+    lbd_list,
+    positions,
+    trades_list,
+    trade_counter,
+    cum_return,
+    cum_overhodl
+)
+
+
+# last_buy_date = LastBuyDate()
+# last_sell_date = LastSellDate()
 
 class TholonicStrategy:
     def __init__(self, ohlc_data=None, sentiment=None, **kwargs):
         self.sentiment = sentiment
         self.configfile = kwargs.get('configfile',"trading_bot_config.toml")
-
+        global trades_list
+        # self.trades_list = trades_list
         # Load configuration from TOML file
         with open(self.configfile, 'r') as config_file: config = toml.load(config_file)
 
         # override parameters from kwargs, else, use config values
         self.trading_pair           = kwargs.get('trading_pair',          config['datamanager']['trading_pair'])
-        self.lookback_period        = kwargs.get('lookback_period',       config['cfg']['lookback_period'])
+        self.lookback_period        = kwargs.get('lookback_period',       config['datamanager']['window_size'])
         self.livemode               = kwargs.get('livemode',              config['datamanager']['livemode'])
         self.negotiation_threshold  = kwargs.get('negotiation_threshold', config['cfg']['negRange'][0])
         self.limitation_multiplier  = kwargs.get('limitation_multiplier', config['cfg']['limRange'][0])
         self.contribution_threshold = kwargs.get('contribution_threshold',config['cfg']['conRange'][0])
-
+        self.stop_loss_percentage   = kwargs.get('stop_loss_percentage',  config['cfg']['stop_loss_percentage'])
         self.data = pd.DataFrame(ohlc_data)
+
+        # Define columns and their data types
+        # columns_and_dtypes = {
+        #     'entry_date': 'datetime64[ns]',
+        #     'entry_price': 'float64',
+        #     'entry_sentiment': 'float64',
+        #     'exit_date': 'datetime64[ns]',
+        #     'exit_price': 'float64',
+        #     'exit_sentiment': 1,
+        #     'trx_return': 'float64',
+        #     'buy_and_hold_return': 'float64',
+        #     'trx_overhodl': 'float64',
+        #     'cum_return': 'float64',
+        #     'cum_overhodl': 'float64',
+        # }
+        columns_and_dtypes = {
+            'entry_date': 'datetime64[ns]',
+            'entry_price': 'float64',
+            'entry_sentiment': 'int64',
+            'exit_date': 'datetime64[ns]',
+            'exit_price': 'float64',
+            'exit_sentiment': 'int64',
+            'trx_return': 'float64',
+            'buy_and_hold_return': 'float64',
+            'trx_overhodl': 'float64',
+            'cum_return': 'float64',
+            'cum_overhodl': 'float64',
+
+        }
+
+
+        # Initialize self.trades with specified columns and dtypes
+        self.trades = pd.DataFrame({col: pd.Series(dtype=dt) for col, dt in columns_and_dtypes.items()})
+
+
+        positions=0
 
     def update_data(self):
         if self.livemode:
@@ -192,18 +245,26 @@ class TholonicStrategy:
         self.data['negotiation_condition'] = self.data['price_change'] >= self.negotiation_threshold
         self.data['limitation_condition'] = self.data['volume'] >= self.data['average_volume'] * self.limitation_multiplier
         self.data['contribution_condition'] = self.data['volatility'] <= self.data['average_volatility'] * self.contribution_threshold
+
+
+        # t.xprint("neg",self.data['negotiation_condition'].iloc[-1],co=fg.LIGHTRED_EX, ex=False)
+        # t.xprint("lim",self.data['limitation_condition'].iloc[-1],co=fg.LIGHTGREEN_EX, ex=False)
+        # t.xprint("con",self.data['contribution_condition'].iloc[-1],co=fg.LIGHTBLUE_EX, ex=False)
+
         self.data['buy_condition'] = (
             self.data['negotiation_condition'] &
             self.data['limitation_condition'] &
             self.data['contribution_condition']
         )
+        # t.xprint("neg",self.data['buy_condition'].iloc[-1],co=fg.LIGHTRED_EX, ex=False)
+
         self.data['sell_condition'] = (
             (self.data['volatility'] < self.data['average_volatility']) &
             (self.data['volatility'].shift(1) >= self.data['average_volatility'].shift(1))
         )
 
-        #TODO  why is this here AFTER setting the sell_condition?
-        self.data['volatility'] <= self.data['average_volatility'] * self.contribution_threshold
+        #reassign self.data['volatility'] to be True/False
+        self.data['volatility'] = self.data['volatility'] <= self.data['average_volatility'] * self.contribution_threshold
 
 
     def generate_signals_torch(self, data_tensor):
@@ -243,75 +304,118 @@ class TholonicStrategy:
         """
         window_size = len(self.data)
 
-
-    def backtest(self, initial_position=0):
-        position = initial_position
-        trades = []
-
-        for i, row in self.data.iterrows():
-            sentiment = row['sentiment']
-            close = row['close']
-            isBuy = row['buy_condition']
-            isSell = row['sell_condition']
-
-            doBuy = position == 0 and isBuy
-            if doBuy:
-                position = 1
-                tary = {'entry_date': i, 'entry_price': close, 'entry_sentiment': sentiment}
-                trades.append(tary)
-
-            doSell = position == 1 and isSell
-            if doSell:
-                if trades:
-                    position = 0
-                    tary = {'exit_date': i, 'exit_price': close, 'exit_sentiment': sentiment}
-                    trades[-1].update(tary)
-                else:
-                    print("  WARNING: Attempted to sell without any prior buys. Ignoring this sell signal.")
-
-        return trades, position  # Return the final position along with trades
+    def dates_differ(self,entry):
+        if 'entry_date' not in entry or 'exit_date' not in entry:
+            return True  # Keep entries with missing dates
+        return entry['entry_date'] != entry['exit_date']
 
 
-    def calculate_performance(self, trades):
-        if trades.empty:  # Check if trades list is empty
-            # print("No trades executed")
-            return None
 
-        # Convert trades list to DataFrame if it's not already
-        if isinstance(trades, list):
-            trades = pd.DataFrame(trades)
 
-        # Check if 'exit_price' exists in the DataFrame
-        if 'exit_price' not in trades.columns:
-            # print("No completed trades found")
-            return None
+    def backtest(self):
+        global positions,lbd_list,lsd_list, trades_list, trade_counter, cum_return, cum_overhodl
 
-        # Filter out incomplete trades
-        completed_trades = trades.dropna(subset=['exit_price'])
+        # trades_list is already a global list of trades
 
-        if completed_trades.empty:
-            # print("No completed trades found")
-            return None
 
-        completed_trades['return'] = (completed_trades['exit_price'] - completed_trades['entry_price']) / completed_trades['entry_price']
-        total_return = (completed_trades['return'] + 1).prod() - 1
-        num_trades = len(completed_trades)
-        win_rate = (completed_trades['return'] > 0).mean()
+        # Get the last index from the data
+        first_i = self.data.index[0]
+        first_row = self.data.loc[first_i]
 
-        inon = completed_trades['entry_sentiment'].iloc[0]
-        outon = completed_trades['exit_sentiment'].iloc[-1]
+        last_i = self.data.index[-1]
+        last_row = self.data.loc[last_i]
 
-        buy_and_hold_return = (self.data['close'].iloc[-1] - self.data['close'].iloc[0]) / self.data['close'].iloc[0]
-        strat_over_hodl = total_return - buy_and_hold_return
+        ttime = last_row['timestamp'].timestamp() # unix timestamp
+        strtime = t.ts2str(ttime)
+        sentiment = last_row['sentiment']
+        first_close = first_row['close']
+        last_close = last_row['close']
+        isBuy = last_row['buy_condition']
+        isSell = last_row['sell_condition']
 
-        return {
-            'Return': total_return,
-            'Trades': num_trades,
-            'Profit': win_rate,
-            'StratOverHodl': strat_over_hodl,
-            'inon': inon,
-            'outon': outon,
-        }
+        # Determine whether to execute a buy order
+
+
+        doBuy = (
+            positions == 0 and
+            isBuy
+            and last_i > lsd_list[-1]
+            and last_i > lbd_list[-1]
+        )
+
+        if doBuy:
+            positions += 1
+
+            trade_entry = {
+                'entry_date': last_i,  #! <class 'pandas._libs.tslibs.timestamps.Timestamp'>
+                'entry_price': last_close,
+                'entry_sentiment': sentiment,
+            }
+            # t.xprint("BOUGHT",f"BOUGHT",co=fg.LIGHTRED_EX, ex=False)
+
+            trades_list.append(trade_entry)
+            lbd_list.append(last_i)
+
+        # Determine whether to execute a sell order
+        doSell = (
+            len(trades_list) > 0
+            and positions == 1
+            and isSell
+            # and ttime > lbd_list[-1] # Ensures sell does not occur on the same timestamp as the last buy
+        )
+
+        # force doSell override is stop loss limit is exceeded
+        entry_price = trades_list[-1]['entry_price']
+        trx_return =  (last_close - entry_price) / entry_price
+
+        if trx_return < -(self.stop_loss_percentage/100):
+            doSell = True
+            print(bg.RED+fg.LIGHTYELLOW_EX+"STOP LOSS"+fg.RESET+bg.RESET)
+
+        # # do NOT sell when entry_sent = 1 AND exit_sent = 2
+        # entry_sent = trades_list[-1]['entry_sentiment']
+        # exit_sent  = sentiment
+        # if entry_sent == 1 and exit_sent == 2:
+        #     doSell = False
+        #     print(fg.LIGHTYELLOW_EX+"DO NOT SELL"+fg.RESET)
+
+        # CONTINUE
+        if doSell:
+            positions = 0
+
+            # make performance calculations
+            buy_and_hold_return =   (last_close - first_close) / first_close
+
+            trx_overhodl = trx_return - buy_and_hold_return
+
+            cum_return   +=  trx_return
+            cum_overhodl +=  trx_overhodl
+
+            # Record the sell order
+            trade_exit = {
+                'exit_date': last_i, #! <class 'pandas._libs.tslibs.timestamps.Timestamp'>
+                'exit_price': last_close,
+                'exit_sentiment': sentiment,
+                'buy_and_hold_return': buy_and_hold_return,
+                'trx_return':  trx_return,
+                'trx_overhodl': trx_overhodl,
+                'cum_return': cum_return,
+                'cum_overhodl': cum_overhodl
+            }
+
+            # update dict in list
+            trade_counter += 1
+            # print("trade_counter",trade_counter)
+            trades_list[-1].update(trade_exit)
+            lsd_list.append(last_i)
+        # convert back the the nightmare that is dataframes
+        self.trades = pd.DataFrame(trades_list)
+
+        return self, trade_counter
+
+
+
+
 
     def show_data(self,data):
         # print(self.data.index) # useless
@@ -354,7 +458,7 @@ class TholonicStrategy:
         # Get the latest data
         latest_data = self.data.iloc[-1].copy()
 
-        return latest_data, self.data
+        return self
 
 
     def run_strategy_torch(self):

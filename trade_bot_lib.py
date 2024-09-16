@@ -35,16 +35,40 @@ from decimal import Decimal, ROUND_HALF_UP
 import csv
 from pprint import pprint
 import sys
+import logging
+import datetime
+import time
+# Remove all handlers associated with the root logger object.
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
+
+# Set up file handler
+file_handler = logging.FileHandler('your_log_file.log', mode='w')
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter('%(filename)s:%(lineno)d:%(funcName)s - %(levelname)s - %(message)s'))
+
+# Configure root logger
+logging.getLogger().setLevel(logging.INFO)
+logging.getLogger().addHandler(file_handler)
+
+# Ensure no logging goes to the console
+logging.getLogger().addHandler(logging.NullHandler())
 
 
-def xprint(text,prettyprint=False):
-    print("----------------------------------------")
-    if prettyprint:
+def xprint(id,text,**kwargs):
+    pp = kwargs.get('pp',False)
+    cl = kwargs.get('co',fg.CYAN)
+    ex = kwargs.get('ex',True)
+    print(cl)
+    print(f"-------------------------------------{id}--")
+    if pp:
         pprint(text)
     else:
         print(text)
-    print("----------------------------------------")
-    exit()
+    print(f"-------------------------------------{id}--")
+    print(fg.RESET)
+    if ex:
+        exit()
 
 def normalize_numeric_values(values):
     numeric_values = [v for v in values if isinstance(v, (int, float))]
@@ -73,6 +97,10 @@ def normalize_numeric_values(values):
 #     return str(value)
 
 def format_value(value):
+    """
+    Format a value for display in a report.
+    Returns: str: The formatted value.
+    """
     if value is None:
         return ""
     elif isinstance(value, (int, float)):
@@ -98,38 +126,23 @@ def format_value(value):
 #         ws.column_dimensions[column_letter].width = adjusted_width
 
 def print_trading_info(**kwargs):
+    strategy_report_filename = kwargs.get('strategy_report_filename', 'line_results.xlsx')
     # Define the expected fields and their default values
     expected_fields = {
         'idx': 0,
         'timestamp': '',
+
+        'sentiment': 0,
         'signal': '',
         'trading_pair': '',
         'close_price': 0,
         'last_buy_price': 0,
 
-        'volatility': 0,
-        'average_volatility': 1,  # To avoid division by zero
-        'volume': 0,
-        'average_volume': 1,      # To avoid division by zero
-
         'transaction_profit': 0,
         'total_profit_pct': 0,
         'HODL_units': 0,
 
-        'macd_sig': 0,
-        'macd': 0,
-        'macd_sigline': 0,
-        'macds_delta': 0,
-        'last_buy_macd_sentiment': 0,
-        'macd_sentiment': 0,
-        # 'normalized_macd_sentiment': 0,
-
         'order_submission_status': '',
-
-        # 'avg_position_price': 0,
-        # 'num_positions': 0,
-        # 'total_profit': 0,
-
     }
 
     # Update expected_fields with provided values
@@ -139,39 +152,21 @@ def print_trading_info(**kwargs):
 
     # Define all fields and the order they appear
     all_fields = OrderedDict([
-        ('idx', expected_fields['idx']),
-        ('timestamp', expected_fields['timestamp']),
-        ('Sig', expected_fields['signal']),
-        ('Pair', expected_fields['trading_pair']),
-        ('Bought $', f"{expected_fields['last_buy_price']}"),
-        ('Sold $', f"{expected_fields['close_price']}"),
+        ('x', f"{expected_fields['idx']:4d}"),
+        ('t', expected_fields['timestamp']),
 
-        ('Trx Profit %', expected_fields['transaction_profit']),
-        ('Tot Profit %', expected_fields['total_profit_pct']),
+        ('s', f"{expected_fields['sentiment']:2d}"),
+        ('a', f"{expected_fields['signal']:4s}"),
+        # ('Pair', expected_fields['trading_pair']),
+        ('i', f"{expected_fields['last_buy_price']:10.2f}"),
+        ('o', f"{expected_fields['close_price']:10.2f}"),
 
-        ('HODL units', expected_fields['HODL_units']),
+        # ('TxP%', expected_fields['transaction_profit']),
+        ('p', f"{expected_fields['total_profit_pct']:+8.2f}%"),
+        ('h', f"{expected_fields['HODL_units']:+8.4f}"),
 
-        # ('Volume (VL)', expected_fields['volume']),
-        # ('avgVL (aVL)', expected_fields['average_volume']),
+        # ('Stat', expected_fields['order_submission_status']),
 
-        # ('Volatility (VT)', expected_fields['volatility']),
-        # ('avgVT (aVT)', expected_fields['average_volatility']),
-
-        # ('VTaVT_ratio', expected_fields['volatility'] / expected_fields['average_volatility'] if expected_fields['average_volatility'] != 0 else 0),
-        # ('VLaVL_ratio', expected_fields['volume'] / expected_fields['average_volume'] if expected_fields['average_volume'] != 0 else 0),
-        # ('aVLaVT_ratio', expected_fields['average_volume'] / expected_fields['average_volatility'] if expected_fields['average_volume'] != 0 else 0),
-
-        # ('macd', expected_fields['macd']),
-        # ('macd_sig', expected_fields['macd_sig']),
-        # ('macd_sigline', expected_fields['macd_sigline']),
-        ('macds delta', expected_fields['macds_delta']),
-        ('buy macds', expected_fields['last_buy_macd_sentiment']),
-        ('sell macds', expected_fields['macd_sentiment']),
-        # ('normalized_macd_sentiment', expected_fields['normalized_macd_sentiment']),
-
-        # ('Avg Pos $', f"{expected_fields['avg_position_price'])}"),
-        # ('Num Pos', expected_fields['num_positions'])),
-        # ('Total Profit $', expected_fields['total_profit'])),
 
     ])
 
@@ -193,18 +188,21 @@ def print_trading_info(**kwargs):
     excel_reporter.update_report(output_line, list(all_fields.keys()))
 
     # Prepare console output
-    console_output = " | ".join(f"{key}: {format_value(value)}" for key, value in all_fields.items())
+    # the following like adds titles to each value, which is cumberson
+    # console_output = " | ".join(f"{key}: {format_value(value)}" for key, value in all_fields.items())
+    # this output is much tigher
+    console_output = ""
+    for key, value in all_fields.items():
+        console_output += f"| {value} "
 
-
-    # Print to console
-    # output_string = ",".join(output_line)
+    # Print to STDERR, which enables teh view of debug prints by using "2> /dev/null"
     if expected_fields['signal'] == "BUY":
         color = fg.RED if expected_fields['order_submission_status'] != "unavailable" else fg.LIGHTBLUE_EX
         print(color + console_output + (" unavailable" if expected_fields['order_submission_status'] == "unavailable" else "") + fg.RESET)
     elif expected_fields['signal'] == "SELL":
-        print(fg.GREEN + console_output + fg.RESET + "\n")
+        print(fg.GREEN + console_output + fg.RESET + "\n", file=sys.stderr)
     else:  # HOLD
-        print(fg.BLUE + console_output + fg.RESET)
+        print(fg.LIGHTMAGENTA_EX + console_output + fg.RESET, file=sys.stderr)
 
 
 
@@ -419,9 +417,27 @@ def status_line(**kwargs):
     limCounter = kwargs.get('limCounter', 0)
     conCounter = kwargs.get('conCounter', 0)
     lookCounter = kwargs.get('lookCounter', 0)
-    status_line = f"  S: {sentiment:2d} T:{trade_counter:6d}: W:{rolling_window_position:.0f}  \tn:{fg.LIGHTCYAN_EX}{negCounter:.2f}{fg.RESET}\tl:{fg.LIGHTMAGENTA_EX}{limCounter:.2f}{fg.RESET}\tc:{fg.LIGHTGREEN_EX}{conCounter:.2f}{fg.RESET}\tk:{fg.LIGHTRED_EX}{lookCounter:.0f}{fg.RESET}                "
-    print(status_line, file=sys.stderr, end="\r",flush=True)
+    limitCounter = kwargs.get('limitCounter', 0)
+    enter_date = kwargs.get('enter_date', 'missing-date')
 
+    status_line = f"[{enter_date}]  L:{limitCounter:6d} S:{sentiment:2d} T:{trade_counter:6d}: W:{rolling_window_position:.0f}  \tn:{fg.LIGHTCYAN_EX}{negCounter:.2f}{fg.RESET}\tl:{fg.LIGHTMAGENTA_EX}{limCounter:.2f}{fg.RESET}\tc:{fg.LIGHTGREEN_EX}{conCounter:.2f}{fg.RESET}\tk:{fg.LIGHTRED_EX}{lookCounter:.0f}{fg.RESET}                "
+    print(status_line, file=sys.stderr, end="\n",flush=True)
+
+def ts2str(ts):
+    dt_object = datetime.datetime.fromtimestamp(ts)
+
+    # Format the datetime object to a string (month day, year hour:minute:second)
+    formatted_time = dt_object.strftime("%B %d, %Y %H:%M:%S")
+    return formatted_time
+
+def str2ts(time_string):
+    # Parse the time string into a datetime object
+    dt_object = datetime.datetime.strptime(time_string, "%B %d %Y %H:%M:%S")
+
+    # Convert the datetime object to a UNIX timestamp
+    unix_timestamp = time.mktime(dt_object.timetuple())
+
+    return unix_timestamp
 
 FCY = fg.CYAN
 FLB = fg.LIGHTBLUE_EX

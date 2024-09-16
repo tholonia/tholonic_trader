@@ -47,6 +47,19 @@ class ExcelReporter:
         self.ws = None
         self.load_or_create_workbook()
 
+
+    def set_column_format(self, column, number_format):
+        """
+        Set the number format for an entire column.
+
+        :param column: Column letter (e.g., 'A', 'B') or number (1, 2, ...)
+        :param number_format: Number format code (e.g., '0.00%', '$#,##0.00')
+        """
+        if isinstance(column, int):
+            column = get_column_letter(column)
+
+        for cell in self.ws[column]:
+            cell.number_format = number_format
     def load_or_create_workbook(self):
         if os.path.exists(self.file_name):
             self.wb = load_workbook(self.file_name)
