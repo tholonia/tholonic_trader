@@ -1,5 +1,5 @@
 """
-trade_bot_lib.py: Utility Functions for Trading Bot
+cimulator_lib.py: Utility Functions for Trading Bot
 
 This module contains utility functions used throughout the trading bot application.
 These functions provide support for data processing, formatting, and visualization.

@@ -22,7 +22,7 @@ from pprint import pprint
 import pandas as pd
 import torch
 import torch.nn.functional as F
-import trade_bot_lib as t
+import cimulator_lib as t
 import toml
 import datetime
 from GlobalsClass import (
@@ -45,7 +45,7 @@ from GlobalsClass import (
 class TholonicStrategy:
     def __init__(self, ohlc_data=None, sentiment=None, **kwargs):
         self.sentiment = sentiment
-        self.configfile = kwargs.get('configfile',"trading_bot_config.toml")
+        self.configfile = kwargs.get('configfile',"cfg/cimulator.toml")
         global trades_list
         # self.trades_list = trades_list
         # Load configuration from TOML file
@@ -59,6 +59,7 @@ class TholonicStrategy:
         self.limitation_multiplier  = kwargs.get('limitation_multiplier', config['cfg']['limRange'][0])
         self.contribution_threshold = kwargs.get('contribution_threshold',config['cfg']['conRange'][0])
         self.stop_loss_percentage   = kwargs.get('stop_loss_percentage',  config['cfg']['stop_loss_percentage'])
+        self.commission_rate        = kwargs.get('commission_rate',       config['cfg']['commission_rate'])
         self.data = pd.DataFrame(ohlc_data)
 
         # Define columns and their data types
@@ -204,91 +205,6 @@ class TholonicStrategy:
             raise ValueError(f"Invalid volatility method: {select}")
             exit(2)
 
-    def calculate_indicators(self):
-        # Price change remains the same as it's calculated per row (old comment, but I have no idea what I was referring to :/ )
-        self.data['price_change'] = (self.data['close'] - self.data['open']) / self.data['open'] * 100
-
-        # Use the mean of all volume data in the set
-        self.data['average_volume'] = self.data['volume'].mean()
-
-        # Calculate volatility as the standard deviation of all close prices in the set
-        self.calculate_volatility(volatility_method='parkinsons')
-
-    def calculate_indicators_torch(self, data_tensor):
-        # Unpack columns
-        open_price, high, low, close, volume = data_tensor.unbind(1)
-
-        # Calculate price change
-        price_change = (close - open_price) / open_price * 100
-        data_tensor = torch.cat([data_tensor, price_change.unsqueeze(1)], dim=1)
-
-        # Calculate average volume
-        avg_volume = volume.mean().expand(volume.shape[0], 1)
-        data_tensor = torch.cat([data_tensor, avg_volume], dim=1)
-
-        # Calculate volatility (Garman-Klass)
-        log_hl = torch.log(high / low).pow(2)
-        log_co = torch.log(close / open_price).pow(2)
-        volatility = torch.sqrt(0.5 * log_hl - (2 * torch.log(torch.tensor(2.)) - 1) * log_co)
-        annualization_factor = torch.sqrt(torch.tensor(8760.))
-        volatility *= annualization_factor
-        data_tensor = torch.cat([data_tensor, volatility.unsqueeze(1)], dim=1)
-
-        # Calculate average volatility using cumulative sum and division
-        cumsum_volatility = torch.cumsum(volatility, dim=0)
-        lookback_tensor = torch.arange(1, len(volatility) + 1, device=data_tensor.device).float().clamp(max=self.lookback)
-        avg_volatility = cumsum_volatility / lookback_tensor
-        data_tensor = torch.cat([data_tensor, avg_volatility.unsqueeze(1)], dim=1)
-
-        return data_tensor
-
-    def generate_signals(self):
-        self.data['negotiation_condition'] = self.data['price_change'] >= self.negotiation_threshold
-        self.data['limitation_condition'] = self.data['volume'] >= self.data['average_volume'] * self.limitation_multiplier
-        self.data['contribution_condition'] = self.data['volatility'] <= self.data['average_volatility'] * self.contribution_threshold
-
-
-        # t.xprint("neg",self.data['negotiation_condition'].iloc[-1],co=fg.LIGHTRED_EX, ex=False)
-        # t.xprint("lim",self.data['limitation_condition'].iloc[-1],co=fg.LIGHTGREEN_EX, ex=False)
-        # t.xprint("con",self.data['contribution_condition'].iloc[-1],co=fg.LIGHTBLUE_EX, ex=False)
-
-        self.data['buy_condition'] = (
-            self.data['negotiation_condition'] &
-            self.data['limitation_condition'] &
-            self.data['contribution_condition']
-        )
-        # t.xprint("neg",self.data['buy_condition'].iloc[-1],co=fg.LIGHTRED_EX, ex=False)
-
-        self.data['sell_condition'] = (
-            (self.data['volatility'] < self.data['average_volatility']) &
-            (self.data['volatility'].shift(1) >= self.data['average_volatility'].shift(1))
-        )
-
-        #reassign self.data['volatility'] to be True/False
-        self.data['volatility'] = self.data['volatility'] <= self.data['average_volatility'] * self.contribution_threshold
-
-
-    def generate_signals_torch(self, data_tensor):
-        price_change, volume, avg_volume, volatility, avg_volatility = data_tensor[:, -5:].unbind(1)
-
-        negotiation_condition = price_change >= self.negotiation_threshold
-        limitation_condition = volume >= avg_volume * self.limitation_multiplier
-        contribution_condition = volatility <= avg_volatility * self.contribution_threshold
-
-        buy_condition = negotiation_condition & limitation_condition & contribution_condition
-        sell_condition = (volatility < avg_volatility) & (F.pad(volatility, (1, 0))[:-1] >= F.pad(avg_volatility, (1, 0))[:-1])
-
-        data_tensor = torch.cat([
-            data_tensor,
-            negotiation_condition.unsqueeze(1).float(),
-            limitation_condition.unsqueeze(1).float(),
-            contribution_condition.unsqueeze(1).float(),
-            buy_condition.unsqueeze(1).float(),
-            sell_condition.unsqueeze(1).float()
-        ], dim=1)
-
-        return data_tensor
-
     def print_data_info(self):
         """
         Print information about the data, including its sentiment.
@@ -416,7 +332,7 @@ class TholonicStrategy:
                 'exit_price': last_close,
                 'exit_sentiment': sentiment,
                 'buy_and_hold_return': buy_and_hold_return,
-                'trx_return':  trx_return,
+                'trx_return':  trx_return * (1-self.commission_rate),
                 'trx_overhodl': trx_overhodl,
                 'cum_return': cum_return,
                 'cum_overhodl': cum_overhodl
@@ -438,29 +354,35 @@ class TholonicStrategy:
 
     def show_data(self,data):
         # print(self.data.index) # useless
-        print("-------------------------------------------------------------------- df.head()")
+        print("▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ df.head()")
         print(data.head())
-        print("-------------------------------------------------------------------- df.info()")
+        print("▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ df.info()")
         print(data.info())
-        print("-------------------------------------------------------------------- df.types()")
+        print("▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ df.types()")
         print(data.dtypes)
-        print("-------------------------------------------------------------------- df.describe()")
+        print("▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ df.describe()")
         print(data.describe())
-        print("-------------------------------------------------------------------- df.todict")
+        print("▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ df.todict")
         pprint(self.data.to_dict()) #too long
-        print("-------------------------------------------------------------------- df")
+        print("▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ df")
         pprint(self.data) # INCOMPLETE
-        print("-------------------------------------------------------------------- df.index")
+        print("▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ df.index")
         print(self.data.index) #useless
-        print("-------------------------------------------------------------------- df.values")
+        print("▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ df.values")
         print(self.data.values) # unreadablke
-        print("-------------------------------------------------------------------- df.head()")
+        print("▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ df.head()")
         print(self.data.head()) #useless
-        print("-------------------------------------------------------------------- df.tail()")
+        print("▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ df.tail()")
         print(self.data.tail()) #useless
-        print("-------------------------------------------------------------------- df.tail()")
+        print("▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇▇ df.tail()")
         # exit()
 
+
+
+#~┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+#~┃ Torch mods                                                              ┃
+#~┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+#! ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ run_strategy_torch ━━━━━━━━━━━━━━━━━━━━━━━━━
 
     def run_strategy(self):
         # self.update_data()   #TODO  needed for live only
@@ -479,8 +401,73 @@ class TholonicStrategy:
 
         return self
 
-
     def run_strategy_torch(self):
+        # Set the device to GPU if available
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Select only OHLCV columns
+        ohlcv_columns = ['open', 'high', 'low', 'close', 'volume']
+        ohlcv_data = self.data[ohlcv_columns].copy()
+
+        # Convert DataFrame to PyTorch tensor and move to GPU
+        data_tensor = torch.tensor(ohlcv_data.values, dtype=torch.float32, device=device)
+
+        # Step 1: Calculate indicators (on GPU)
+        data_tensor = self.calculate_indicators_torch(data_tensor)
+
+        # Step 2: Generate buy/sell signals based on the indicators
+        data_tensor = self.generate_signals_torch(data_tensor)
+
+        # Step 3: Analyze sentiment using a PyTorch-based sentiment analyzer
+        sentiment_analyzer = OHLCSentimentAnalyzer()
+        sentiment_tensor = sentiment_analyzer.analyze_torch(data_tensor)
+
+        # Check the dimension of sentiment_tensor and adjust if necessary
+        if sentiment_tensor.dim() == 0:  # It's a scalar
+            sentiment_tensor = sentiment_tensor.unsqueeze(0)
+        if sentiment_tensor.dim() == 1:  # It's a 1D tensor
+            sentiment_tensor = sentiment_tensor.unsqueeze(1)
+
+        # Ensure sentiment_tensor has the same number of rows as data_tensor
+        if sentiment_tensor.shape[0] != data_tensor.shape[0]:
+            sentiment_tensor = sentiment_tensor.expand(data_tensor.shape[0], -1)
+
+        # Step 4: Concatenate sentiment tensor with data_tensor
+        data_tensor = torch.cat([data_tensor, sentiment_tensor], dim=1)
+
+
+        # Step 5: Create column names for the tensor
+        columns = ohlcv_columns + [
+            'price_change', 'average_volume', 'volatility', 'average_volatility',
+            'negotiation_condition', 'limitation_condition', 'contribution_condition',
+            'buy_condition', 'sell_condition', 'sentiment'
+        ]
+
+        # Step 6: Convert boolean columns
+        bool_columns = ['negotiation_condition', 'limitation_condition', 'contribution_condition', 'buy_condition', 'sell_condition']
+        bool_indices = [columns.index(col) for col in bool_columns]
+        data_tensor[:, bool_indices] = torch.round(torch.sigmoid(data_tensor[:, bool_indices]))
+
+        # Step 7: Move results back to CPU and convert to numpy
+        cpu_data = data_tensor.cpu().numpy()
+
+        # Step 8: Create a new DataFrame with all columns
+        self.data = pd.DataFrame(cpu_data, columns=columns, index=self.data.index)
+
+        # Convert boolean columns to proper boolean type
+        self.data[bool_columns] = self.data[bool_columns].astype(bool)
+
+        # Step 9: Return the latest row of data and the updated DataFrame
+        latest_data = torch.tensor(self.data.iloc[-1].values, dtype=torch.float32, device=device)
+
+        return latest_data, self.data
+
+
+
+
+
+
+    def cc_run_strategy_torch(self):
         # Convert DataFrame to PyTorch tensor and move to GPU
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         data_tensor = torch.tensor(self.data.values, dtype=torch.float32, device=device)
@@ -519,3 +506,204 @@ class TholonicStrategy:
 
         return latest_data, self.data
 
+#! ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ calculate_indicators ━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    def calculate_indicators(self):
+        # Price change remains the same as it's calculated per row (old comment, but I have no idea what I was referring to :/ )
+        self.data['price_change'] = (self.data['close'] - self.data['open']) / self.data['open'] * 100
+
+        # Use the mean of all volume data in the set
+        self.data['average_volume'] = self.data['volume'].mean()
+
+        # Calculate volatility as the standard deviation of all close prices in the set
+        self.calculate_volatility(volatility_method='parkinsons')
+
+
+    def calculate_indicators_torch(self, data_tensor):
+        open_price, high, low, close, volume = data_tensor.unbind(1)
+
+        price_change = (close - open_price) / open_price * 100
+        average_volume = volume.mean().expand_as(volume)
+        volatility = torch.abs(high - low) / close * 100
+
+        # Ensure average_volatility has the same size as other tensors
+        padding = (self.lookback_period - 1) // 2
+        average_volatility = F.avg_pool1d(volatility.unsqueeze(0).unsqueeze(0),
+                                        kernel_size=self.lookback_period,
+                                        stride=1,
+                                        padding=padding).squeeze(0).squeeze(0)
+
+        # Ensure all tensors have the same size
+        min_length = min(len(data_tensor), len(price_change), len(average_volume), len(volatility), len(average_volatility))
+        data_tensor = data_tensor[-min_length:]
+        price_change = price_change[-min_length:]
+        average_volume = average_volume[-min_length:]
+        volatility = volatility[-min_length:]
+        average_volatility = average_volatility[-min_length:]
+
+        return torch.cat([data_tensor,
+                        price_change.unsqueeze(1),
+                        average_volume.unsqueeze(1),
+                        volatility.unsqueeze(1),
+                        average_volatility.unsqueeze(1)], dim=1)
+
+    # def calculate_indicators_torch(self, data_tensor):
+    #     # Unpack columns (assuming the first 5 columns are: open_price, high, low, close, volume)
+    #     open_price, high, low, close, volume = data_tensor.unbind(1)
+
+    #     # Step 1: Calculate price change as a percentage
+    #     price_change = (close - open_price) / open_price * 100
+    #     data_tensor = torch.cat([data_tensor, price_change.unsqueeze(1)], dim=1)
+
+    #     # Step 2: Calculate average volume
+    #     avg_volume = volume.mean().expand(volume.shape[0], 1)  # Mean volume across all entries
+    #     data_tensor = torch.cat([data_tensor, avg_volume], dim=1)
+
+    #     # Step 3: Calculate volatility using Garman-Klass method
+    #     log_hl = torch.log(high / low).pow(2)
+    #     log_co = torch.log(close / open_price).pow(2)
+    #     volatility = torch.sqrt(0.5 * log_hl - (2 * torch.log(torch.tensor(2.0, device=data_tensor.device)) - 1) * log_co)
+
+    #     # Step 4: Apply annualization factor for volatility (e.g., assuming 8760 hours in a year)
+    #     annualization_factor = torch.sqrt(torch.tensor(8760.0, device=data_tensor.device))
+    #     volatility *= annualization_factor
+    #     data_tensor = torch.cat([data_tensor, volatility.unsqueeze(1)], dim=1)
+
+    #     # Step 5: Calculate average volatility using a cumulative sum
+    #     cumsum_volatility = torch.cumsum(volatility, dim=0)  # Cumulative sum of volatility
+    #     # Create a lookback tensor, clamped by self.lookback, for moving average calculations
+    #     lookback_tensor = torch.arange(1, len(volatility) + 1, device=data_tensor.device).float().clamp(max=self.lookback_period)
+    #     avg_volatility = cumsum_volatility / lookback_tensor  # Rolling average of volatility
+    #     data_tensor = torch.cat([data_tensor, avg_volatility.unsqueeze(1)], dim=1)
+
+    #     return data_tensor
+
+    def cc_calculate_indicators_torch(self, data_tensor):
+        # Unpack columns
+        open_price, high, low, close, volume = data_tensor.unbind(1)
+
+        # Calculate price change
+        price_change = (close - open_price) / open_price * 100
+        data_tensor = torch.cat([data_tensor, price_change.unsqueeze(1)], dim=1)
+
+        # Calculate average volume
+        avg_volume = volume.mean().expand(volume.shape[0], 1)
+        data_tensor = torch.cat([data_tensor, avg_volume], dim=1)
+
+        # Calculate volatility (Garman-Klass)
+        log_hl = torch.log(high / low).pow(2)
+        log_co = torch.log(close / open_price).pow(2)
+        volatility = torch.sqrt(0.5 * log_hl - (2 * torch.log(torch.tensor(2.)) - 1) * log_co)
+        annualization_factor = torch.sqrt(torch.tensor(8760.))
+        volatility *= annualization_factor
+        data_tensor = torch.cat([data_tensor, volatility.unsqueeze(1)], dim=1)
+
+        # Calculate average volatility using cumulative sum and division
+        cumsum_volatility = torch.cumsum(volatility, dim=0)
+        lookback_tensor = torch.arange(1, len(volatility) + 1, device=data_tensor.device).float().clamp(max=self.lookback)
+        avg_volatility = cumsum_volatility / lookback_tensor
+        data_tensor = torch.cat([data_tensor, avg_volatility.unsqueeze(1)], dim=1)
+
+        return data_tensor
+
+#! ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ generate_signals ━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    def generate_signals(self):
+        self.data['negotiation_condition'] = self.data['price_change'] >= self.negotiation_threshold
+        self.data['limitation_condition'] = self.data['volume'] >= self.data['average_volume'] * self.limitation_multiplier
+        self.data['contribution_condition'] = self.data['volatility'] <= self.data['average_volatility'] * self.contribution_threshold
+
+
+        # t.xprint("neg",self.data['negotiation_condition'].iloc[-1],co=fg.LIGHTRED_EX, ex=False)
+        # t.xprint("lim",self.data['limitation_condition'].iloc[-1],co=fg.LIGHTGREEN_EX, ex=False)
+        # t.xprint("con",self.data['contribution_condition'].iloc[-1],co=fg.LIGHTBLUE_EX, ex=False)
+
+        self.data['buy_condition'] = (
+            self.data['negotiation_condition'] &
+            self.data['limitation_condition'] &
+            self.data['contribution_condition']
+        )
+        # t.xprint("neg",self.data['buy_condition'].iloc[-1],co=fg.LIGHTRED_EX, ex=False)
+
+        self.data['sell_condition'] = (
+            (self.data['volatility'] < self.data['average_volatility']) &
+            (self.data['volatility'].shift(1) >= self.data['average_volatility'].shift(1))
+        )
+
+        #reassign self.data['volatility'] to be True/False
+        self.data['volatility'] = self.data['volatility'] <= self.data['average_volatility'] * self.contribution_threshold
+
+    def cc_generate_signals_torch(self, data_tensor):
+        price_change, volume, avg_volume, volatility, avg_volatility = data_tensor[:, -5:].unbind(1)
+
+        negotiation_condition = price_change >= self.negotiation_threshold
+        limitation_condition = volume >= avg_volume * self.limitation_multiplier
+        contribution_condition = volatility <= avg_volatility * self.contribution_threshold
+
+        buy_condition = negotiation_condition & limitation_condition & contribution_condition
+        sell_condition = (volatility < avg_volatility) & (F.pad(volatility, (1, 0))[:-1] >= F.pad(avg_volatility, (1, 0))[:-1])
+
+        data_tensor = torch.cat([
+            data_tensor,
+            negotiation_condition.unsqueeze(1).float(),
+            limitation_condition.unsqueeze(1).float(),
+            contribution_condition.unsqueeze(1).float(),
+            buy_condition.unsqueeze(1).float(),
+            sell_condition.unsqueeze(1).float()
+        ], dim=1)
+
+        return data_tensor
+
+
+    def generate_signals_torch(self, data_tensor):
+        # Implement your signal generation logic here using PyTorch operations
+        # This is a placeholder implementation
+        price_change, average_volume, volatility, average_volatility = data_tensor[:, -4:].unbind(1)
+
+        negotiation_condition = price_change >= self.negotiation_threshold
+        limitation_condition = data_tensor[:, 4] >= average_volume * self.limitation_multiplier
+        contribution_condition = volatility <= average_volatility * self.contribution_threshold
+
+        buy_condition = negotiation_condition & limitation_condition & contribution_condition
+        sell_condition = volatility < average_volatility
+
+        signals = torch.stack([negotiation_condition, limitation_condition, contribution_condition,
+                            buy_condition, sell_condition], dim=1).float()
+
+        return torch.cat([data_tensor, signals], dim=1)
+
+    # def generate_signals_torch(self, data_tensor):
+    #     # Unpack necessary columns from the tensor
+    #     price_change, volume, average_volume, volatility, average_volatility = data_tensor[:, -5:].unbind(1)
+
+    #     # Step 1: Calculate negotiation condition (price_change >= negotiation_threshold)
+    #     negotiation_condition = price_change >= self.negotiation_threshold
+
+    #     # Step 2: Calculate limitation condition (volume >= average_volume * limitation_multiplier)
+    #     limitation_condition = volume >= average_volume * self.limitation_multiplier
+
+    #     # Step 3: Calculate contribution condition (volatility <= average_volatility * contribution_threshold)
+    #     contribution_condition = volatility <= average_volatility * self.contribution_threshold
+
+    #     # Step 4: Calculate buy condition (negotiation & limitation & contribution)
+    #     buy_condition = negotiation_condition & limitation_condition & contribution_condition
+
+    #     # Step 5: Calculate sell condition (volatility < average_volatility) & (previous volatility >= previous average_volatility)
+    #     prev_volatility = torch.roll(volatility, shifts=1)  # Shift volatility by 1 to get the previous value
+    #     prev_avg_volatility = torch.roll(average_volatility, shifts=1)
+    #     sell_condition = (volatility < average_volatility) & (prev_volatility >= prev_avg_volatility)
+
+    #     # Step 6: Reassign volatility column (True/False) based on whether volatility <= average_volatility * contribution_threshold
+    #     volatility_condition = volatility <= average_volatility * self.contribution_threshold
+
+    #     # Step 7: Concatenate the conditions back to the data tensor
+    #     # Adding negotiation, limitation, contribution, buy, sell, and volatility_condition as new columns
+    #     conditions_tensor = torch.stack([
+    #         negotiation_condition, limitation_condition, contribution_condition,
+    #         buy_condition, sell_condition, volatility_condition
+    #     ], dim=1).float()
+
+    #     # Concatenate new conditions to the original data_tensor
+    #     data_tensor = torch.cat([data_tensor, conditions_tensor], dim=1)
+
+    #     return data_tensor

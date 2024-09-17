@@ -1,0 +1,111 @@
+testvars_fast:
+
+  # for testvars_fast.py
+  reportfilename: "nlc_results.csv"
+  from_date: "2023-07-27 00:00:00"
+  to_date: "2024-08-27 00:00:00"
+  csv_file: "/home/jw/src/cbot/data/BTC_USD_OHLC_60_20230727_20240827.csv"
+  rolling_window_size: 16   #! this is also the lookback period
+  max_loops: 100000000  #! unlimited by default.  Set to 100 for short testing
+
+  # for trade_bot.py
+  livemode: False
+  max_positions: 1
+  trading_pair: "BTCUSD"
+  commission_rate: 0.001 # 0.1%
+  initial_balance: 1000 # this never gets used as we use the first price as a initial balance
+  verbosity_level: 0
+  limitcount: 720
+  # ohlcfile: False #"data//BTCUSD_OHLC_1440_default.csv"
+  stop_loss_percentage: 4.8 # 1%
+
+# lowres testing vals
+  negRange: [0.0, 4.1, 4]
+  limRange: [0.0, 4.1, 4]
+  conRange: [0.0, 6.1, 4]
+  kRange: [16,17,1000]
+
+
+
+trade_bot:
+  Optimals:
+    1: #~-Sideways: # optimal nlc for mtype==1
+      negRange: [0.0, 4.2, 0.2]
+      limRange: [0.0, 2.2, 0.2]
+      conRange: [0.0, 5.2, 0.2]
+      kRange: [16,17,1000]
+    2: #~-StrongBear: #~ optimal nlc for mtype==2
+      negRange: [0.38, 10,1000000]
+      limRange: [0.47, 10,1000000]
+      conRange: [0.51, 10,1000000]
+      kRange: [16,17,1000]
+    3: #~-Bear: #~ optimal nlc for mtype==3
+      negRange: [0.24, 10,1000000]
+      limRange: [0.52, 10,1000000]
+      conRange: [0.51, 10,1000000]
+      kRange: [16,17,1000]
+    4: #~-Strong Bull: #~ optimal nlc for mtype==4
+      negRange: [0.29, 10,1000000]
+      limRange: [0.41, 10,1000000]
+      conRange: [0.6, 10,1000000]
+      kRange: [16,17,1000]
+    5: #~-Bull: #~ optimal nlc for mtype==5
+      negRange: [0.14, 10,1000000]
+      limRange: [0.41, 10,1000000]
+      conRange: [0.59, 10,1000000]
+      kRange: [16,17,1000]
+    6: #~-HighResistance: #~ optimal nlc for mtype==6
+      negRange: [0.34, 10,1000000]
+      limRange: [0.43, 10,1000000]
+      conRange: [0.47, 10,1000000]
+      kRange: [16,17,1000]
+    # 7: #~-StrongSupportSideways: #~ optimal nlc for mtype==7
+    #   negRange: [0.0, 10,1000000]
+    #   limRange: [0.0, 10,1000000]
+    #   conRange: [0.0, 10,1000000]
+    #   kRange: [16,17,1000]
+    8: #~-HighVolatility: #~ optimal nlc for mtype==8
+      negRange: [0.26, 10,1000000]
+      limRange: [0.46, 10,1000000]
+      conRange: [0.56, 10,1000000]
+      kRange: [16,17,1000]
+    # 9: #~-Neutral: #~ optimal nlc for mtype==9
+    #   negRange: [0.0, 4.2, 0.2]
+    #   limRange: [0.0, 2.2, 0.2]
+    #   conRange: [0.0, 5.2, 0.2]
+    #   kRange: [16,17,1000]
+    10: #~-Mixed: #~ optimal nlc for mtype==10
+      negRange: [0.21, 10,1000000]
+      limRange: [0.47, 10,1000000]
+      conRange: [0.54, 10,1000000]
+      kRange: [16,17,1000]
+
+
+# hires
+  # negRange: [0.0, 4.2, 0.2]
+  # limRange: [0.0, 2.2, 0.2]
+  # conRange: [0.0, 5.2, 0.2]
+  # kRange: [16,17,1000]
+
+# test case for best nlc for 2-strongbear, which had the best return of 12%  "2-Strong Bear	12.35	0.63	0.42	2.59	829"
+  # negRange: [0.63,10,1000]
+  # limRange: [0.42,10,1000]
+  # conRange: [2.59,10,1000]
+  # kRange: [16,17,1000]
+# test case for the nlc for highest trx count per HODL range and with a +4% return
+  negRange: [2.13,10,1000]
+  limRange: [1.03,10,1000]
+  conRange: [2.59,10,1000]
+  kRange: [16,17,1000]
+
+
+
+
+get_data_COINBASE_BTC:
+  crypto_symbol: "BTC"
+  base_symbol: "USD"
+  # from_date: "2024-08-27"
+  # to_date: "2024-08-28"
+  from_date: 16
+  to_date: "NOW"
+  granularity: 3600  # Default to 1 hour

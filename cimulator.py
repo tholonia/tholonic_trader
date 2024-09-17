@@ -17,7 +17,7 @@ from ExcelReporterClass import ExcelReporter
 import traceback
 
 import toml
-import trade_bot_lib as t
+import cimulator_lib as t
 from colorama import Fore as fg
 from pprint import pprint
 import os
@@ -41,8 +41,8 @@ def append_dict_to_df(df, data_dict):
 if __name__ == "__main__":
     argv = sys.argv[1:]
 
-    configfile = "trading_bot_config.toml"
-    testvars_report_filename = "testvars_fast.xlsx"
+    configfile = "cfg/cimulator.toml"
+    testvars_report_filename = "doc/testvars_fast.xlsx"
 
     try:
         opts, args = getopt.getopt(argv, "hc:r:", ["help","config=","report="])
@@ -266,8 +266,8 @@ if __name__ == "__main__":
                                             # 'entry_sentiment': strategy.trades['entry_sentiment'].iloc[-1],
                                             # 'exit_sentiment': strategy.trades['exit_sentiment'].iloc[-1],
 
-                                            'cum_trx': 0.0, #strategy.trades['cum_trx'].iloc[-1],
-                                            'cum_oh': 0.0, #strategy.trades['cum_oh'].iloc[-1],
+                                            # 'cum_trx': 0.0, #strategy.trades['cum_trx'].iloc[-1],
+                                            # 'cum_oh': 0.0, #strategy.trades['cum_oh'].iloc[-1],
                                             # 'cum_trx_growth': 0.0, #strategy.trades['cum_trx_growth'].iloc[-1],
                                             # 'cum_oh_growth': 0.0, #strategy.trades['cum_oh_growth'].iloc[-1],
                                             'cum_trx_pct': 0.0, #strategy.trades['cum_trx_pct'].iloc[-1],
@@ -285,9 +285,6 @@ if __name__ == "__main__":
                                         print(f"Error in status_line: {e}")
                                         traceback.print_exc()
 
-
-                            # t.xprint(2,f"{line_counter}/({csv_lines}-{rolling_window_size})",ex=False, co=fg.GREEN)
-
                             if line_counter > max_loops:
                                 print(f"max_loops reached: {line_counter}/{max_loops}")
                                 raise BreakoutException
@@ -295,19 +292,16 @@ if __name__ == "__main__":
                             if line_counter >= csv_lines-rolling_window_size:
                                 print(f"csv_lines reached: {line_counter}/({csv_lines}-{rolling_window_size})")
                                 raise BreakoutException
-                            # if line_counter > max_loops or line_counter >= csv_lines-rolling_window_size:
-                                # After all data processing and just before writing to Excel
-                                # do some math on the cum_return and cum_overhodl columns
-
-                                # rdf['cum_trx'] = 1 + rdf['trx_ret']
-                                # rdf['cum_trx_growth'] = 1 + rdf['cum_trx'].cumprod()
-                                # rdf['cum_trx_pct'] = 1 + rdf['oh_ret']-1
 
     except BreakoutException as e:
         pass
 
-    rdf['cum_trx_pct'] = (1 + rdf['trx_ret']).cumprod() - 1
-    rdf['cum_oh_pct'] = (1 + rdf['oh_ret']).cumprod() - 1
+    # rdf['cum_trx'] = 1 + rdf['trx_ret']
+    # rdf['cum_trx_growth'] = 1 + rdf['cum_trx'].cumprod()
+    # rdf['cum_trx_pct'] = 1 + rdf['oh_ret']-1    rdf['cum_trx_pct'] = (1 + rdf['trx_ret']).cumprod() - 1
+
+    rdf['cum_oh_pct'] = (1 + rdf['oh_ret']).cumprod() - 1  # calculate the cumulative return for overhodl
+    rdf['cum_trx_pct'] = (1 + rdf['trx_ret']).cumprod() - 1  # calculate the cumulative return for transactions
 
     rdf.to_excel(testvars_report_filename,index=False)
 
@@ -319,8 +313,8 @@ if __name__ == "__main__":
     xlsx_reporter.set_column_format("entry_price", "$0")
     xlsx_reporter.set_column_format("exit_price", "$0")
 
-    xlsx_reporter.set_column_format("cum_trx", "0.00%")
-    xlsx_reporter.set_column_format("cum_oh", "0.00%")
+    # xlsx_reporter.set_column_format("cum_trx", "0.00%")
+    # xlsx_reporter.set_column_format("cum_oh", "0.00%")
 
     xlsx_reporter.set_column_format("cum_trx_pct", "0.00%")
     xlsx_reporter.set_column_format("cum_oh_pct", "0.00%")

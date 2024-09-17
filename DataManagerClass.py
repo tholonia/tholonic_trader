@@ -2,10 +2,10 @@ import pandas as pd
 import ccxt
 from datetime import datetime, timedelta
 import toml
-import trade_bot_lib as t
+import cimulator_lib as t
 
 class DataManager:
-    def __init__(self, config_file='trading_bot_config.toml'):
+    def __init__(self, config_file='cfg/cimulator.toml'):
         self.config       = self.load_config(config_file)
         self.data_source  = self.config['datamanager']['source']
         self.exchange     = self.config['datamanager']['exchange']

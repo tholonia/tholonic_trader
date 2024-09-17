@@ -4,10 +4,10 @@ import pandas as pd
 import toml
 from DataManagerClass import DataManager
 from colorama import Fore as fg
-import trade_bot_lib as t
+import cimulator_lib as t
 
 class DataLoadingTester:
-    def __init__(self, config_file='trading_bot_config.toml'):
+    def __init__(self, config_file='cfg/cimulator.toml'):
         with open(config_file, 'r') as f: self.config = toml.load(f)
 
         self.data_manager = DataManager(config_file)
