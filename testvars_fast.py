@@ -26,6 +26,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.styles import numbers
 from openpyxl import load_workbook
 # from GlobalsClass import trade_counter
+import traceback
 
 def append_dict_to_df(df, data_dict):
     return pd.concat([df, pd.DataFrame([data_dict])], ignore_index=True)
@@ -112,11 +113,13 @@ if __name__ == "__main__":
     sentiments_ary = config['simulation'] #! holds the optimal AVERAGE values for each mtype
 
     line_counter = 0
-    # for rolling_window_position in range(loader.get_windows_count()):
     rdf = pd.DataFrame()
+
+
 
     for rolling_window_position in range(len(loader.data)-rolling_window_size):
         print(f"{line_counter}/{csv_lines}", end="\r")
+
         line_counter += 1
 
         ohlc_data = loader.get_rolling_window(window_locations=[rolling_window_position,1])
@@ -196,6 +199,7 @@ if __name__ == "__main__":
                                 last_exit_date = strategy.trades['exit_date'].iloc[-1]
                                 # Check if 'exit_date' is NaT (i.e., trade is still open)
                                 if pd.isna(last_exit_date):
+                                    # print(f"Trade not closed: {last_exit_date}")
                                     # The last trade has not been closed; decide to break or handle accordingly
                                     break
                                 else:
@@ -204,6 +208,7 @@ if __name__ == "__main__":
                             else:
                                 # Either 'exit_date' does not exist or there are no trades
                                 # Handle accordingly, e.g., continue or break
+                                print(f"No trades OR exit_date: {strategy.trades}")
                                 break
 
                             """
@@ -225,7 +230,6 @@ if __name__ == "__main__":
 
                                 if trade_counter == 0:
                                     print("No Trades!")
-                                    exit()
                                 # else:
                                 #     print(f"{trade_counter} trades")
 
@@ -253,52 +257,86 @@ if __name__ == "__main__":
                                         'L': limCounter,
                                         'C': conCounter,
                                         'K': lookCounter,
-                                        'trx_return': strategy.trades['trx_return'].iloc[-1],
-                                        'cum_return': strategy.trades['cum_return'].iloc[-1],
-                                        'trx_overhodl': strategy.trades['trx_overhodl'].iloc[-1],
-                                        'cum_overhodl': strategy.trades['cum_overhodl'].iloc[-1],
+                                        'trx_ret': strategy.trades['trx_return'].iloc[-1],
+                                        'oh_ret': strategy.trades['trx_overhodl'].iloc[-1],
                                         'entry_sentiment': strategy.trades['entry_sentiment'].iloc[-1],
                                         'exit_sentiment': strategy.trades['exit_sentiment'].iloc[-1],
-                                        'price_change': sentiment_metadata_ary['price_change'],
-                                        'trend': sentiment_metadata_ary['trend'],
-                                        'average_body_size': sentiment_metadata_ary['average_body_size'],
-                                        'average_upper_wick': sentiment_metadata_ary['average_upper_wick'],
-                                        'average_lower_wick': sentiment_metadata_ary['average_lower_wick'],
-                                        'volatility': sentiment_metadata_ary['volatility'],
+
+                                        'cum_trx': 0.0, #strategy.trades['cum_trx'].iloc[-1],
+                                        'cum_oh': 0.0, #strategy.trades['cum_oh'].iloc[-1],
+                                        'cum_trx_growth': 0.0, #strategy.trades['cum_trx_growth'].iloc[-1],
+                                        'cum_oh_growth': 0.0, #strategy.trades['cum_oh_growth'].iloc[-1],
+                                        'cum_trx_pct': 0.0, #strategy.trades['cum_trx_pct'].iloc[-1],
+                                        'cum_oh_pct': 0.0, #strategy.trades['cum_oh_pct'].iloc[-1],
+
+                                        # 'price_change': sentiment_metadata_ary['price_change'],
+                                        # 'trend': sentiment_metadata_ary['trend'],
+                                        # 'average_body_size': sentiment_metadata_ary['average_body_size'],
+                                        # 'average_upper_wick': sentiment_metadata_ary['average_upper_wick'],
+                                        # 'average_lower_wick': sentiment_metadata_ary['average_lower_wick'],
+                                        # 'volatility': sentiment_metadata_ary['volatility'],
                                     }
                                     rdf = append_dict_to_df(rdf, row)
                                 except Exception as e:
                                     print(f"Error in status_line: {e}")
+                                    traceback.print_exc()
 
-                        if line_counter > max_loops or line_counter >= csv_lines-rolling_window_position:
+
+                        # t.xprint(2,f"{line_counter}/({csv_lines}-{rolling_window_size})",ex=False, co=fg.GREEN)
+
+                        if line_counter > max_loops:
+                            print(f"max_loops reached: {line_counter}/{max_loops}")
+                            break
+                        if line_counter >= csv_lines-rolling_window_size:
+                            print(f"csv_lines reached: {line_counter}/({csv_lines}-{rolling_window_size})")
+                            break
+                        # if line_counter > max_loops or line_counter >= csv_lines-rolling_window_size:
                             # After all data processing and just before writing to Excel
-                            rdf.to_excel(testvars_report_filename,index=False)
+                            # do some math on the cum_return and cum_overhodl columns
 
-                            xlsx_reporter = ExcelReporter(testvars_report_filename)
-                            xlsx_reporter.load_or_create_workbook()
+                            # rdf['cum_trx'] = 1 + rdf['trx_ret']
+                            # rdf['cum_trx_growth'] = 1 + rdf['cum_trx'].cumprod()
+                            # rdf['cum_trx_pct'] = 1 + rdf['oh_ret']-1
 
-                            xlsx_reporter.set_column_format("trx_return", "0.00%")
-                            xlsx_reporter.set_column_format("cum_return", "0.00%")
-                            xlsx_reporter.set_column_format("trx_overhodl", "0.00%")
-                            xlsx_reporter.set_column_format("cum_overhodl", "0.00%")
-                            xlsx_reporter.set_column_format("entry_price", "$0")
-                            xlsx_reporter.set_column_format("exit_price", "$0")
-                            xlsx_reporter.set_column_format("price_change", "0.00%")
-                            xlsx_reporter.set_column_format("volatility", "0.0000")
-                            xlsx_reporter.set_column_format("average_body_size", "0.0000")
-                            xlsx_reporter.set_column_format("average_upper_wick", "0.0000")
-                            xlsx_reporter.set_column_format("average_lower_wick", "0.0000")
-                            xlsx_reporter.set_column_format("trend", "0.000")
+rdf['cum_trx_pct'] = (1 + rdf['trx_ret']).cumprod() - 1
+rdf['cum_oh_pct'] = (1 + rdf['oh_ret']).cumprod() - 1
 
-                            xlsx_reporter.adjust_column_width()
-                            xlsx_reporter.add_table()
-                            xlsx_reporter.save()
 
-                            # add additional columns here
-                            # add a normalized value (to the cum_overhodl column) for closing price so as to compare on the chart
-                            xlsx_reporter.add_norm_close_column(testvars_report_filename)
 
-                            print(f"Results have been written to {testvars_report_filename} [{line_counter}]")
-                            exit()
+
+rdf.to_excel(testvars_report_filename,index=False)
+
+xlsx_reporter = ExcelReporter(testvars_report_filename)
+xlsx_reporter.load_or_create_workbook()
+
+xlsx_reporter.set_column_format("trx_ret", "0.00%")
+xlsx_reporter.set_column_format("oh_ret", "0.00%")
+xlsx_reporter.set_column_format("entry_price", "$0")
+xlsx_reporter.set_column_format("exit_price", "$0")
+
+xlsx_reporter.set_column_format("cum_trx", "0.00%")
+xlsx_reporter.set_column_format("cum_oh", "0.00%")
+
+xlsx_reporter.set_column_format("cum_trx_pct", "0.00%")
+xlsx_reporter.set_column_format("cum_oh_pct", "0.00%")
+
+
+# xlsx_reporter.set_column_format("price_change", "0.00%")
+# xlsx_reporter.set_column_format("volatility", "0.0000")
+# xlsx_reporter.set_column_format("average_body_size", "0.0000")
+# xlsx_reporter.set_column_format("average_upper_wick", "0.0000")
+# xlsx_reporter.set_column_format("average_lower_wick", "0.0000")
+# xlsx_reporter.set_column_format("trend", "0.000")
+
+xlsx_reporter.adjust_column_width()
+xlsx_reporter.add_table()
+xlsx_reporter.save()
+
+# add additional columns here
+# add a normalized value (to the cum_overhodl column) for closing price so as to compare on the chart
+xlsx_reporter.add_norm_close_column(testvars_report_filename)
+
+print(f"Results have been written to {testvars_report_filename} [{line_counter}]")
+exit()
 
 

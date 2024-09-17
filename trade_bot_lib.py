@@ -408,6 +408,36 @@ def count_csv_lines(file_path):
     with open(file_path, 'r') as file:
         return sum(1 for row in csv.reader(file))
 
+def datetime_to_unix(date_string):
+    # Parse the date string manually
+    year, month, day, hour, minute, second = map(int, date_string.replace(' ', '-').replace(':', '-').split('-'))
+    dt = datetime(year, month, day, hour, minute, second)
+
+    # Convert datetime object to Unix timestamp
+    return dt.timestamp()
+
+def unix_to_datetime(unix_timestamp):
+    """Convert Unix timestamp to datetime string."""
+    return datetime.fromtimestamp(unix_timestamp).strftime('%Y-%m-%d %H:%M:%S')
+
+
+def pandas_timestamp_to_python_timestamp(pandas_ts):
+    """
+    Convert a pandas Timestamp to a Python timestamp (Unix timestamp as a float).
+
+    :param pandas_ts: pandas.Timestamp
+    :return: float
+    """
+    return pandas_ts.timestamp()
+
+def pandas_timestamp_to_unix(pandas_ts):
+    """
+    Convert a pandas Timestamp to a Unix timestamp (float).
+
+    :param pandas_ts: pandas._libs.tslibs.timestamps.Timestamp
+    :return: float
+    """
+    return pandas_ts.timestamp()
 
 def status_line(**kwargs):
     sentiment = kwargs.get('sentiment', 0)

@@ -79,7 +79,7 @@ class ExcelReporter:
 
             # Identify the correct column names
             entry_price_col = 'entry_price'  # Update this if different
-            cum_overhodl_col = 'cum_overhodl'  # Update this if different
+            cum_overhodl_col = 'cum_oh'  # Update this if different
 
             # Calculate 'norm_close'
             entry_price_min = df[entry_price_col].min()
