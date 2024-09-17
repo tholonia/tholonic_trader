@@ -332,6 +332,7 @@ class TholonicStrategy:
         last_row = self.data.loc[last_i]
 
         first_close  = first_row['close']
+        # ttime        = last_row['time'].to_pydatetime() #???
         sentiment    = last_row['sentiment']
         last_close   = last_row['close']
         isBuy        = last_row['buy_condition']
@@ -348,17 +349,18 @@ class TholonicStrategy:
         #     else: dump_alert_wait -= 1
 
         #!┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-        #!┃ BUY                                                                     ┃
+        #!┃ Test for BUY                                                            ┃
         #!┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
 
-        doBuy = (
-            positions == 0 # no pyramiding allowed
+        doBuy = (True
+            and positions == 0 # no pyramiding allowed
             and isBuy
             and last_i > last_sell_date_list[-1] # make sure this is a buy after a sell
             and last_i > last_buy_date_list[-1] # make sure this is a new buy
             # and dump_alert_wait < 1
         )
 
+        #!━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         if doBuy:
             positions += 1
 
@@ -373,44 +375,36 @@ class TholonicStrategy:
             last_buy_date_list.append(last_i) # keep a record of the date of the last buy date
             last_buy_price_list.append(last_close) # keep a record of the price of the last buy_price
 
-        #!┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-        #!┃ SELL                                                                    ┃
-        #!┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+        #~┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+        #~┃ Test for SELL                                                           ┃
+        #~┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
         # Determine whether to execute a sell order
-        doSell = (
-            len(trades_list) > 0
+        doSell = (True
+            and len(trades_list) > 0
             and positions == 1
             and isSell
-            and ttime > lbd_list[-1] # Ensures sell does not occur on the same timestamp as the last buy
+            # and last_i > last_buy_date_list[-1] # Ensures sell does not occur on the same timestamp as the last buy
         )
 
-        try:
-            entry_price = trades_list[-1]['entry_price']
-            trx_return =  (last_close - entry_price) / entry_price
+        entry_price = trades_list[-1]['entry_price']
+        trx_return =  (last_close - entry_price) / entry_price
 
-            # force doSell override if stop loss limit is exceeded
-            if trx_return < -(self.stop_loss_percentage/100):
-                doSell = True
+        # first check the stop-loss, and if it's triggered, sell at stop-loss price
+        if (True
+            and positions == 1
+            and trx_return < -(self.stop_loss_percentage/100)
+            ):
                 last_close = last_buy_price_list[-1] * (1 - self.stop_loss_percentage/100)
+                doSell = True
                 print(bg.RED+fg.LIGHTYELLOW_EX+"STOP LOSS"+fg.RESET+bg.RESET)
-        except:
-            doSell = False
-        # # do NOT sell when entry_sent = 1 AND exit_sent = 2
-        # entry_sent = trades_list[-1]['entry_sentiment']
-        # exit_sent  = sentiment
-        # if entry_sent == 1 and exit_sent == 2:
-        #     doSell = False
-        #     print(fg.LIGHTYELLOW_EX+"DO NOT SELL"+fg.RESET)
-
-        # CONTINUE
+        #~━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
         if doSell:
             positions = 0
 
             # make performance calculations
+
             buy_and_hold_return =   (last_close - first_close) / first_close
-
             trx_overhodl = trx_return - buy_and_hold_return
-
             cum_return   +=  trx_return
             cum_overhodl +=  trx_overhodl
 
@@ -428,9 +422,9 @@ class TholonicStrategy:
 
             # update dict in list
             trade_counter += 1
-            # print("trade_counter",trade_counter)
             trades_list[-1].update(trade_exit)
             last_sell_date_list.append(last_i)
+
         # convert back the the nightmare that is dataframes
         self.trades = pd.DataFrame(trades_list)
 

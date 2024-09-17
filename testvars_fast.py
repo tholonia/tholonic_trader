@@ -14,6 +14,7 @@ from TholonicStrategyClass import TholonicStrategy
 from DataManagerClass import DataManager
 from SentimentClass import OHLCSentimentAnalyzer
 from ExcelReporterClass import ExcelReporter
+import traceback
 
 import toml
 import trade_bot_lib as t
@@ -23,9 +24,11 @@ import os
 import openpyxl
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import numbers
+from openpyxl import load_workbook
 # from GlobalsClass import trade_counter
 
-
+def append_dict_to_df(df, data_dict):
+    return pd.concat([df, pd.DataFrame([data_dict])], ignore_index=True)
 
 #!┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 #!┃ main                                                                    ┃
@@ -71,11 +74,8 @@ if __name__ == "__main__":
 
     # set initial values
     csv_lines = t.count_csv_lines(csv_file)
-    iterCounter = 0
-    iterCounter = 0
     entry_price = 0
     exit_price = 0
-    # position = 0 # hold the number of open trades
     running_profit = 0
     trxgain = 0
     oHODL_cum = 0
@@ -83,37 +83,9 @@ if __name__ == "__main__":
     last_trade_counter = 0
 
     tradestore = []
-    # create the excel file
+    # delete existing excel file if it exists
     try: os.unlink(testvars_report_filename)
     except: pass
-    xlsx_reporter = ExcelReporter(testvars_report_filename)
-    xlsx_reporter.load_or_create_workbook()
-    header = [
-        'idx',
-        'FromDate',
-        'ToDate',
-        'entry_price',
-        'exit_price',
-        'N',
-        'L',
-        'C',
-        'K',
-        'trx_return',
-        'cum_return',
-        'trx_overhodl',
-        'cum_overhodl',
-        'entry_sentiment',
-        'exit_sentiment',
-        'price_change',
-        'trend',
-        'avg_body_size',
-        'avg_upper_wick',
-        'avg_lower_wick',
-        'volatility',
-        # 'norm_close',
-    ]
-    xlsx_reporter.write_header(header)
-
 
     # instantiate the dataloader to handle all the source data retrieval and manipulation
     loader = DataManager()
@@ -138,26 +110,22 @@ if __name__ == "__main__":
 
     """
     sentiments_ary = config['simulation'] #! holds the optimal AVERAGE values for each mtype
-    # sentiments_ary = config['best'] #! holds the BEST values for each mtype
 
     line_counter = 0
     # for rolling_window_position in range(loader.get_windows_count()):
+    rdf = pd.DataFrame()
+
     for rolling_window_position in range(len(loader.data)-rolling_window_size):
         print(f"{line_counter}/{csv_lines}", end="\r")
         line_counter += 1
 
         ohlc_data = loader.get_rolling_window(window_locations=[rolling_window_position,1])
 
-        # t.xprint(ohlc_data,pp=True,co=fg.MAGENTA,ex=False)
-        # Nested loops for parameter combinations
-        # apiout = True #
         sentiment_analyzer = OHLCSentimentAnalyzer(apiout=True) # True=no console output
 
         # analyze the ohlc data and return a sentiment value 1-10
         try:
             sentiment, sentiment_metadata_ary = sentiment_analyzer.analyze(pd.DataFrame(ohlc_data))
-            # print(">>>",sentiment)
-            # exit()
         except Exception as e:
             print(f"Error analyzing sentiment: {e}")
             break
@@ -171,6 +139,8 @@ if __name__ == "__main__":
 
         # in simulation mode each for loop occurs only once.
         # in backtest mode, each for loop occurs for each step in the range defined in the array
+
+        # rows = []
         for negCounter in np.arange(*negRange):
             for limCounter in np.arange(*limRange):
                 for conCounter in np.arange(*conRange):
@@ -216,42 +186,10 @@ if __name__ == "__main__":
                             With torch and gpu:     1m45s to process 1 window; 550 windows = 16 hrs
                             With torch and no gpu:  1m55s to process 1 window; 550 windows = 18 hrs
                             """
-
                             # strategy.run_strategy_torch() #! mangles the buy_condition values
 
-                            """
-                            The df now looks like
-                                                    open      high       low     close      volume  price_change  average_volume  volatility  average_volatility  negotiation_condition  limitation_condition  contribution_condition  buy_condition  sell_condition  sentiment
-                            timestamp
-                            2023-07-27 00:00:00  29298.53  29363.11  29350.88  29355.07  282.211472      0.192979             NaN         NaN                 NaN                   True                 False                   False          False           False          1
-                            2023-07-27 01:00:00  29335.85  29419.74  29355.07  29400.14  172.249822      0.219152             NaN         NaN                 NaN                   True                 False                   False          False           False          1
-                            2023-07-27 02:00:00  29344.42  29438.55  29400.14  29426.53  164.705391      0.279815             NaN         NaN                 NaN                   True                 False                   False          False           False          1
-                            2023-07-27 03:00:00  29402.01  29450.90  29429.20  29403.57  132.702561      0.005306             NaN         NaN                 NaN                   True                 False                   False          False           False          1
-                            2023-07-27 04:00:00  29403.56  29491.05  29403.57  29484.50  157.321089      0.275273             NaN         NaN                 NaN                   True                 False                   False          False           False          1
-
-
-                            Varios fields are added:
-                                strategy.show_data(strategy.data)
-                                    strategy.run_strategy()
-                                    open                      float64
-                                    high                      float64
-                                    low                       float64
-                                    close                     float64
-                                    volume                    float64
-                                    price_change              float64
-                                    average_volume            float64
-                                    volatility                float64
-                                    average_volatility        float64
-                                    negotiation_condition        bool
-                                    limitation_condition         bool
-                                    contribution_condition       bool
-                                    buy_condition                bool
-                                    sell_condition               bool
-                                    sentiment                   int64
-                                    dtype: object
-
-                            """
                             strategy, trade_counter = strategy.backtest(sentiment_metadata_ary)  # updates strategy.trades[] with appended trades
+
                             #! check here for an existing exit_date, and break if it doesn;t exist
                             if 'exit_date' in strategy.trades.columns and not strategy.trades.empty:
                                 # Get the last 'exit_date' value
@@ -300,74 +238,67 @@ if __name__ == "__main__":
                                         limCounter=limCounter,
                                         conCounter=conCounter,
                                         lookCounter=lookCounter,
-                                        limitCounter=iterCounter,
+                                        limitCounter=line_counter,
                                         enter_date=str(strategy.trades['entry_date'].iloc[-1]),
                                     )
                                     last_trade_counter = trade_counter
 
-                                    row = [
-                                        iterCounter,
-                                        f"{strategy.trades['entry_date'].iloc[-1]}",
-                                        f"{strategy.trades['exit_date'].iloc[-1]}",
-                                        strategy.trades['entry_price'].iloc[-1],
-                                        strategy.trades['exit_price'].iloc[-1],
-                                        negCounter,
-                                        limCounter,
-                                        conCounter,
-                                        lookCounter,
-                                        strategy.trades['trx_return'].iloc[-1],
-                                        strategy.trades['cum_return'].iloc[-1],
-                                        strategy.trades['trx_overhodl'].iloc[-1],
-                                        strategy.trades['cum_overhodl'].iloc[-1],
-                                        strategy.trades['entry_sentiment'].iloc[-1],
-                                        strategy.trades['exit_sentiment'].iloc[-1],
-                                        sentiment_metadata_ary['price_change'],
-                                        sentiment_metadata_ary['trend'],
-                                        sentiment_metadata_ary['average_body_size'],
-                                        sentiment_metadata_ary['average_upper_wick'],
-                                        sentiment_metadata_ary['average_lower_wick'],
-                                        sentiment_metadata_ary['volatility'],
-                                        # 0, #sentiment_metadata_ary['norm_close'],
-                                    ]
-                                    all_rows.append(row)
-                                    all_rows = xlsx_reporter.batch_write(all_rows, header,batch_size=100)
+                                    row = {
+                                        'idx': line_counter,
+                                        'FromDate': f"{strategy.trades['entry_date'].iloc[-1]}",
+                                        'ToDate': f"{strategy.trades['exit_date'].iloc[-1]}",
+                                        'entry_price': strategy.trades['entry_price'].iloc[-1],
+                                        'exit_price': strategy.trades['exit_price'].iloc[-1],
+                                        'N': negCounter,
+                                        'L': limCounter,
+                                        'C': conCounter,
+                                        'K': lookCounter,
+                                        'trx_return': strategy.trades['trx_return'].iloc[-1],
+                                        'cum_return': strategy.trades['cum_return'].iloc[-1],
+                                        'trx_overhodl': strategy.trades['trx_overhodl'].iloc[-1],
+                                        'cum_overhodl': strategy.trades['cum_overhodl'].iloc[-1],
+                                        'entry_sentiment': strategy.trades['entry_sentiment'].iloc[-1],
+                                        'exit_sentiment': strategy.trades['exit_sentiment'].iloc[-1],
+                                        'price_change': sentiment_metadata_ary['price_change'],
+                                        'trend': sentiment_metadata_ary['trend'],
+                                        'average_body_size': sentiment_metadata_ary['average_body_size'],
+                                        'average_upper_wick': sentiment_metadata_ary['average_upper_wick'],
+                                        'average_lower_wick': sentiment_metadata_ary['average_lower_wick'],
+                                        'volatility': sentiment_metadata_ary['volatility'],
+                                    }
+                                    rdf = append_dict_to_df(rdf, row)
                                 except Exception as e:
-                                    # pass
                                     print(f"Error in status_line: {e}")
-
 
                         if line_counter > max_loops or line_counter >= csv_lines-rolling_window_position:
                             # After all data processing and just before writing to Excel
-
+                            rdf.to_excel(testvars_report_filename,index=False)
 
                             xlsx_reporter = ExcelReporter(testvars_report_filename)
                             xlsx_reporter.load_or_create_workbook()
 
-                            try:
-                                xlsx_reporter.set_column_format("trx_return", "0.00%")
-                                xlsx_reporter.set_column_format("cum_return", "0.00%")
-                                xlsx_reporter.set_column_format("trx_overhodl", "0.00%")
-                                xlsx_reporter.set_column_format("cum_overhodl", "0.00%")
-                                xlsx_reporter.set_column_format("entry_price", "$0")
-                                xlsx_reporter.set_column_format("exit_price", "$0")
-                                xlsx_reporter.set_column_format("price_change", "0.00%")
-                                xlsx_reporter.set_column_format("volatility", "0.0000")
-                                xlsx_reporter.set_column_format("avg_body_size", "0.00%")
-                                xlsx_reporter.set_column_format("avg_upper_wick", "0.00%")
-                                xlsx_reporter.set_column_format("avg_lower_wick", "0.00%")
-                                xlsx_reporter.set_column_format("trend", "0.000")
-                            except ValueError as e:
-                                print(f"Error: {e}")
+                            xlsx_reporter.set_column_format("trx_return", "0.00%")
+                            xlsx_reporter.set_column_format("cum_return", "0.00%")
+                            xlsx_reporter.set_column_format("trx_overhodl", "0.00%")
+                            xlsx_reporter.set_column_format("cum_overhodl", "0.00%")
+                            xlsx_reporter.set_column_format("entry_price", "$0")
+                            xlsx_reporter.set_column_format("exit_price", "$0")
+                            xlsx_reporter.set_column_format("price_change", "0.00%")
+                            xlsx_reporter.set_column_format("volatility", "0.0000")
+                            xlsx_reporter.set_column_format("average_body_size", "0.0000")
+                            xlsx_reporter.set_column_format("average_upper_wick", "0.0000")
+                            xlsx_reporter.set_column_format("average_lower_wick", "0.0000")
+                            xlsx_reporter.set_column_format("trend", "0.000")
 
                             xlsx_reporter.adjust_column_width()
                             xlsx_reporter.add_table()
                             xlsx_reporter.save()
 
-
                             # add additional columns here
                             # add a normalized value (to the cum_overhodl column) for closing price so as to compare on the chart
                             xlsx_reporter.add_norm_close_column(testvars_report_filename)
+
+                            print(f"Results have been written to {testvars_report_filename} [{line_counter}]")
                             exit()
 
 
-    print(f"Results have been written to {testvars_report_filename} [{iterCounter}]")

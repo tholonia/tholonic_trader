@@ -12,7 +12,7 @@ csv_file = "/home/jw/src/cbot/data/BTC_USD_OHLC_60_20230727_20240827.csv"
 mtype_includes = [1,2,3,4,8,10]
 
 [cfg]
-max_loops = 100000
+max_loops = 10000
 max_positions = 1 # no pyramiding
 commission_rate = 0.001
 initial_balance = 1000
