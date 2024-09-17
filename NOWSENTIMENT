@@ -1,4 +1,26 @@
 #!/bin/bash
+#!/bin/bash
+
+# NOWSENTIMENT: Real-time Sentiment Analysis for Cryptocurrency Data
+
+# This script performs the following tasks:
+# 1. Retrieves the latest cryptocurrency data from Coinbase
+# 2. Conducts sentiment analysis on the retrieved data
+
+# Usage:
+#   ./NOWSENTIMENT
+
+# Dependencies:
+#   - get_data_COINBASE.py: Script to fetch the latest 16 1-hour candles from Coinbase
+#   - sentiment.py: Script to perform sentiment analysis on the fetched data
+
+# Output:
+#   - Saves the latest 16 1-hour candles to data/latest_coinbase.csv
+#   - Performs sentiment analysis on the last 15 candles
+
+# Note:
+#   Ensure that both get_data_COINBASE.py and sentiment.py are executable and
+#   located in the same directory as this script.
 
 ./get_data_COINBASE.py # save the last 16 1hr candles to data/latest_coinbase.csv
 ./sentiment.py -f data/latest_coinbase.csv -o 15

@@ -1,3 +1,40 @@
+"""
+DataManager Class
+
+This class is responsible for managing and loading trading data from various sources.
+
+Attributes:
+    config (dict): Configuration settings loaded from a TOML file.
+    data_source (str): Source of data ('csv' or 'exchange').
+    exchange (str): Name of the exchange (e.g., 'coinbase', 'kraken').
+    window_size (int): Size of the data window for processing.
+    trading_pair (str): The trading pair (e.g., 'BTCUSD').
+    start_date (str): Start date for data retrieval.
+    end_date (str): End date for data retrieval.
+    data (pandas.DataFrame): Loaded trading data.
+
+Methods:
+    __init__(self, config_file='cfg/cimulator.toml'):
+        Initializes the DataManager with configuration settings.
+
+    load_config(self, config_file):
+        Loads configuration from a TOML file.
+
+    load_full_csv(self):
+        Loads the entire CSV file based on configured settings.
+
+    load_data(self, **kwargs):
+        Loads data based on provided parameters or default configuration.
+
+    get_data(self):
+        Returns the loaded data.
+
+Usage:
+    data_manager = DataManager()
+    data = data_manager.load_full_csv()
+"""
+
+
 import pandas as pd
 import ccxt
 from datetime import datetime, timedelta

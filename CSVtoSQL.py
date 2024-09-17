@@ -1,4 +1,40 @@
 #!/usr/bin/env python
+"""
+CSVtoSQL.py: Convert CSV to SQLite Database
+
+This script converts a CSV file to an SQLite database. It reads a CSV file specified as a command-line argument,
+processes the data, and creates an SQLite database with the same name as the CSV file (but with a .db extension).
+
+Usage:
+    python CSVtoSQL.py <csv_file_name>
+
+Arguments:
+    csv_file_name: The name of the CSV file to be converted.
+
+Features:
+    - Deletes existing database file if it exists
+    - Reads CSV file using pandas
+    - Drops 'Time Test Option' column if present
+    - Renames columns to be Python-friendly (lowercase, spaces replaced with underscores)
+    - Creates SQLite database and table based on CSV structure
+    - Inserts CSV data into the SQLite database
+    - Handles various exceptions and provides informative error messages
+    - Logs operations and errors
+
+Dependencies:
+    - pandas
+    - sqlalchemy
+    - logging
+
+Note:
+    Ensure you have the necessary permissions to read the CSV file and write to the directory
+    where the script is located.
+
+Author: [Your Name]
+Date: [Current Date]
+Version: 1.0
+"""
+
 import pandas as pd
 import os
 import sys

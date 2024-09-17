@@ -12,7 +12,6 @@ PUSH
 .deps/
 .directory
 OK
-RUN~
 __pycache__
 trade_bot_predataloader.py
 ~*
@@ -32,3 +31,8 @@ NOTES.md
 DEADJOE
 v2/*
 .*
+cfg/*
+ex/*
+cimulator.prof
+batch*
+

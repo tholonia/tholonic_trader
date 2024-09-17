@@ -1,4 +1,39 @@
 #!/bin/env python
+"""
+get_data_COINBASE.py: Fetch and Process Coinbase OHLC Data
+
+This script fetches Open, High, Low, Close (OHLC) data from the Coinbase Pro API
+for a specified cryptocurrency trading pair and time range. It then processes
+and saves this data to a CSV file.
+
+Usage:
+    python get_data_COINBASE.py [options]
+
+Options:
+    -h, --help              Show this help message and exit
+    -c, --crypto SYMBOL     Cryptocurrency symbol (e.g., BTC, ETH)
+    -b, --base CURRENCY     Base currency symbol (e.g., USD, EUR)
+    -s, --start DATE        Start date for data retrieval (YYYY-MM-DD)
+    -e, --end DATE          End date for data retrieval (YYYY-MM-DD)
+    -o, --output FILENAME   Output CSV filename
+
+The script performs the following main tasks:
+1. Constructs the Coinbase product ID from the provided crypto and base currency.
+2. Fetches OHLC data from the Coinbase Pro API for the specified date range.
+3. Converts the fetched data into a pandas DataFrame.
+4. Saves the processed data to a CSV file.
+
+Note: This script requires the following Python libraries:
+    - requests
+    - pandas
+    - pyyaml
+
+Make sure to install these dependencies before running the script.
+
+Author: [Your Name]
+Date: [Current Date]
+Version: 1.0
+"""
 
 #!/usr/bin/env python
 import sys

@@ -1,3 +1,37 @@
+"""
+OHLCSentimentAnalyzer: Sentiment Analysis for OHLC (Open, High, Low, Close) Data
+
+This class provides functionality to analyze sentiment in financial market data,
+particularly for cryptocurrency trading. It uses various technical indicators
+and price action patterns to determine market sentiment.
+
+Key Features:
+1. Sentiment classification into categories like Bull, Bear, Sideways, etc.
+2. Utilizes PyTorch for efficient tensor computations
+3. Analyzes trends, volatility, and price patterns
+4. Customizable output formats for API integration
+
+Main Methods:
+- __init__(self, apiout=False): Initializes the analyzer with sentiment definitions
+- calculate_trend(self, x, y): Calculates the trend slope using linear regression
+- analyze_torch(self, data_tensor): Performs sentiment analysis on PyTorch tensors
+
+Attributes:
+- apiout: Boolean flag for API output format
+- sentiments: Dictionary containing sentiment definitions and associated symbols
+
+Usage:
+Instantiate the OHLCSentimentAnalyzer class and use the analyze_torch method
+with OHLCV (Open, High, Low, Close, Volume) data to get sentiment analysis results.
+
+Dependencies:
+- PyTorch: For tensor computations
+- Colorama: For colored console output
+- NumPy: For numerical operations
+
+Note: Ensure all dependencies are installed before using this class.
+"""
+
 from colorama import Fore as fg
 import numpy as np
 import torch

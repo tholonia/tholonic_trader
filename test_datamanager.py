@@ -1,4 +1,42 @@
 #!/usr/bin/env python
+"""
+DataLoadingTester: A Test Suite for Data Management in Cimulator
+
+This script provides a comprehensive testing framework for the data loading and management
+functionality of the Cimulator trading bot. It includes the DataLoadingTester class, which
+is designed to validate and verify the data handling processes crucial for the bot's operation.
+
+Key Features:
+1. Configuration loading from TOML files
+2. Integration with the DataManager class for data retrieval
+3. Support for both CSV and live data sources (Kraken and Coinbase)
+4. Flexible data loading with customizable parameters (date range, window size, etc.)
+5. Testing capabilities for various data loading scenarios
+
+Main Class:
+- DataLoadingTester: Handles the setup and execution of data loading tests
+
+Key Methods:
+- __init__: Initializes the tester with configuration and DataManager setup
+- load_full_csv: Loads the entire CSV dataset for comprehensive testing
+- test_data_loading: Tests data loading with various parameters and sources
+
+Usage:
+This script is typically run as part of the Cimulator's testing suite to ensure
+data integrity and proper functioning of the data management components. It can be
+executed standalone or integrated into a larger testing framework.
+
+Dependencies:
+- pandas: For data manipulation
+- toml: For configuration file parsing
+- DataManagerClass: Custom class for managing trading data
+- colorama: For colored console output
+- cimulator_lib: Custom library for Cimulator functionality
+
+Note: Ensure all dependencies are installed and the necessary configuration files
+are in place before running this script.
+"""
+
 
 import pandas as pd
 import toml

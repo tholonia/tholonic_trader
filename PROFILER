@@ -1,3 +1,28 @@
 #!/bin/bash
+#!/bin/bash
+
+# PROFILER: Performance Profiling Script for Cimulator
+
+# This script performs the following tasks:
+# 1. Runs the cimulator.py script with cProfile to generate performance data
+# 2. Converts the profiling data to a visual representation using gprof2dot
+
+# Usage:
+#   ./PROFILER
+
+# Dependencies:
+#   - Python with cProfile module
+#   - gprof2dot (can be installed via pip: pip install gprof2dot)
+#   - Graphviz (for the 'dot' command, install via your system's package manager)
+
+# Output:
+#   - cimulator.prof: Raw profiling data
+#   - cimulator.png: Visual representation of the profiling data
+
+# Note:
+#   Ensure that cimulator.py is in the same directory as this script.
+#   The generated PNG file can be opened with any image viewer to analyze
+#   the performance bottlenecks in the cimulator application.
+
 python -m cProfile -o cimulator.prof ./cimulator.py
 gprof2dot -f pstats cimulator.prof | dot -Tpng -o cimulator.png

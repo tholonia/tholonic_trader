@@ -1,5 +1,48 @@
 #!/usr/bin/env python
 
+"""
+Sentiment Analysis for OHLC (Open, High, Low, Close) Data
+
+This script performs sentiment analysis on OHLC data for financial markets,
+particularly cryptocurrency trading. It uses various metrics to determine
+the market sentiment and provides visual indicators for different market conditions.
+
+Usage:
+    python sentiment.py [-h] [-f FILENAME] [-o OMASK]
+
+Options:
+    -h, --help              Show this help message and exit
+    -f, --csvfile FILENAME  Specify the input CSV file containing OHLC data
+    -o, --omask OMASK       Output mask (1-15) to control the output format
+
+Output Mask:
+    The output mask is a binary representation controlling the output format:
+    Bit 0 (1):   Include name (contiguous monocolor words)
+    Bit 1 (2):   Include symbol (contiguous monocolor symbols)
+    Bit 2 (4):   Include color
+    Bit 3 (8):   Include newlines
+
+    Examples:
+    0  (0000):   Blank output
+    15 (1111):   Full output with newlines, color, name, and symbol (default)
+
+Dependencies:
+    - pandas
+    - numpy
+    - getopt
+    - sys
+    - collections (deque)
+    - colorama
+    - SentimentClass (custom module)
+
+Main Components:
+    - OHLCSentimentAnalyzer: Custom class for sentiment analysis
+    - load_and_analyze_ohlc_data: Function to process the input file and perform analysis
+
+Note: Some parts of the script are commented out, possibly for future use or reference.
+"""
+
+
 import pandas as pd
 import numpy as np
 import getopt
@@ -97,6 +140,12 @@ def load_and_analyze_ohlc_data(file_path, omask,analyzer,window_size=16):
                 df_window = pd.DataFrame(list(window))
                 s = analyzer.analyze(df_window)
 
+                # print(s)
+                # print(s[0])
+                # print(s[1])
+                # print(s[2])
+                # exit()
+
                 # Print the result
                 # print(f"Window ending at line {line_num}:")
                 # print(f"Start: {window[0]['timestamp']}, End: {window[-1]['timestamp']}")
@@ -108,9 +157,9 @@ def load_and_analyze_ohlc_data(file_path, omask,analyzer,window_size=16):
                 mcolor = ''
                 mnewline = ''
 
-                if omask & 1 == 1: mname = s[0]
-                if omask & 2 == 2: msymbol = s[1]
-                if omask & 4 == 4: mcolor = s[2]
+                if omask & 1 == 1: mname = s[0][0]
+                if omask & 2 == 2: msymbol = s[0][1]
+                if omask & 4 == 4: mcolor = s[0][2]
                 if omask & 8 == 8: mnewline = "\n"
 
                 # print(f"|{mcolor}|{mname}|{msymbol}|{mnewline}|")
@@ -154,20 +203,26 @@ output mask:
      1  001  name                               contiguous monocolor words
      2  010  symbol                             contiguous monocolor symbols
      3  011  name + symbol                      contiguous monocolor words and symbols
+
      4  100  color                              blank
      5  101  color + symbol                     contiguous color words
      6  110  color + name                     * contiguous color symbols
      7  111  color + name + symbol              contiguous color words and symbols
+
      8 1000 newlines                            blank
      9 1001 newlines + name                     monocolor words with newlines
     10 1010 newlines + symbol                   monocolor symbols with newlines
     11 1011 newlines + name + symbol            monocolor words and symbols with newlines
+
     12 1100 newlines + color                    blank
     13 1101 newlines + color + symbol           color words with newlines
     14 1110 newlines + color + name             color symbols with newlines
     15 1111 newlines + color + name + symbol  * color words and symbols with newlines (default)
 
 in contriguious mode, a newline is added ever 168 symbols, which equals 1 week of 1hr data
+
+example:
+    ./sentiment.py --csvfile data/BTC_USD_OHLC_60_20230727_20240827.csv --omask 6
 
 
 """

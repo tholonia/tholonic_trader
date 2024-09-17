@@ -43,7 +43,7 @@ for handler in logging.root.handlers[:]:
     logging.root.removeHandler(handler)
 
 # Set up file handler
-file_handler = logging.FileHandler('your_log_file.log', mode='w')
+file_handler = logging.FileHandler('log/your_log_file.log', mode='w')
 file_handler.setLevel(logging.INFO)
 file_handler.setFormatter(logging.Formatter('%(filename)s:%(lineno)d:%(funcName)s - %(levelname)s - %(message)s'))
 
