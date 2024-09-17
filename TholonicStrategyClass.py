@@ -374,6 +374,7 @@ class TholonicStrategy:
             trades_list.append(trade_entry)
             last_buy_date_list.append(last_i) # keep a record of the date of the last buy date
             last_buy_price_list.append(last_close) # keep a record of the price of the last buy_price
+            # print(fg.RED+f"{positions}\t\t\t\tBUY\t\tBUY last_close: {last_close:+3.4f}"+fg.RESET)
 
         #~┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
         #~┃ Test for SELL                                                           ┃
@@ -387,8 +388,9 @@ class TholonicStrategy:
         )
 
         entry_price = trades_list[-1]['entry_price']
-        trx_return =  (last_close - entry_price) / entry_price
 
+        trx_return =  (last_close - entry_price) / entry_price
+        # print(fg.GREEN+f"{positions}\t\t\t\ttrx_return: {trx_return:+3.4f} entry_price: {entry_price:+3.4f} last_close: {last_close:+3.4f}"+fg.RESET)
         # first check the stop-loss, and if it's triggered, sell at stop-loss price
         if (True
             and positions == 1
