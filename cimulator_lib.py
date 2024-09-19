@@ -25,6 +25,7 @@ trading bot system for full functionality.
 """
 
 from colorama import Fore as fg, Back as bg
+import pandas as pd
 from collections import OrderedDict
 from ExcelReporterClass import ExcelReporter
 # from DataLoaderClass import DataLoader
@@ -54,6 +55,8 @@ logging.getLogger().addHandler(file_handler)
 # Ensure no logging goes to the console
 logging.getLogger().addHandler(logging.NullHandler())
 
+def append_dict_to_df(df, data_dict):
+    return pd.concat([df, pd.DataFrame([data_dict])], ignore_index=True)
 
 def xprint(id,text,**kwargs):
     pp = kwargs.get('pp',False)
@@ -124,6 +127,7 @@ def format_value(value):
 #                 pass
 #         adjusted_width = (max_length + 2) * 1.2
 #         ws.column_dimensions[column_letter].width = adjusted_width
+sCounter = 0
 
 def print_trading_info(**kwargs):
     strategy_report_filename = kwargs.get('strategy_report_filename', 'line_results.xlsx')

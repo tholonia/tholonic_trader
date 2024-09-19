@@ -35,6 +35,10 @@ last_buy_price_list = []
 positions = 0
 trades_list = []
 trade_counter = 0
-cum_return = 0
+cum_return_pct = 0
 cum_overhodl = 0
 
+running_trx_return_pct = [0]
+running_trx_overhodl_pct = [0]
+
+capital = 0

@@ -35,4 +35,5 @@ cfg/*
 ex/*
 cimulator.prof
 batch*
-
+.coinbase
+.kraken

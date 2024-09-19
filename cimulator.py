@@ -3,7 +3,6 @@
 This is a test version of the trading bot that uses a single thread to process a single window of data.
 It is used to test the performance of the trading bot in a single thread environment.
 
-
 """
 
 import pandas as pd
@@ -27,12 +26,12 @@ from openpyxl.styles import numbers
 from openpyxl import load_workbook
 # from GlobalsClass import trade_counter
 import traceback
+from CoinbaseClass import CoinbaseTransactionManager
+from GlobalsClass import capital
 
-class BreakoutException(Exception):
-    pass
 
-def append_dict_to_df(df, data_dict):
-    return pd.concat([df, pd.DataFrame([data_dict])], ignore_index=True)
+class BreakoutException(Exception): pass
+
 
 #!┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 #!┃ main                                                                    ┃
@@ -66,6 +65,8 @@ if __name__ == "__main__":
         rolling_window_size = config['datamanager']['window_size']
         testvars_report_filename = config['logging']['testvars_report_filename']
         max_loops = config['cfg']['max_loops']
+        capital = config['cfg']['initial_capital']
+
 
     # OVERRIDE any of the above with command line arguments
     for opt, arg in opts:
@@ -85,6 +86,8 @@ if __name__ == "__main__":
     oHODL_cum = 0
 
     last_trade_counter = 0
+    last_positions = 0
+    mtype_counter = {1:0,2:0,3:0,4:0,5:0,6:0,7:0,8:0,9:0,10:0}
 
     tradestore = []
     # delete existing excel file if it exists
@@ -94,6 +97,8 @@ if __name__ == "__main__":
     # instantiate the dataloader to handle all the source data retrieval and manipulation
     loader = DataManager()
     loader.data = loader.load_full_csv()
+
+    coinbase_manager = CoinbaseTransactionManager
 
     all_rows = []
     all_trades = []
@@ -122,7 +127,7 @@ if __name__ == "__main__":
     try:
 
         for rolling_window_position in range(len(loader.data)-rolling_window_size):
-            print(f"{line_counter}/{csv_lines}", end="\r")
+            # print(f"{line_counter}/{csv_lines}", end="\r")
 
             line_counter += 1
 
@@ -164,6 +169,7 @@ if __name__ == "__main__":
 
                             """
                             if sentiment in mtype_includes: # these are the mtypes to use
+                                mtype_counter[sentiment] += 1
 
                                 strategy = TholonicStrategy(
                                     negotiation_threshold=negCounter,
@@ -172,6 +178,7 @@ if __name__ == "__main__":
                                     ohlc_data=ohlc_data,
                                     sentiment=sentiment,
                                     configfile=configfile,
+                                    capital=capital
                                 )
                                 strategy.data['timestamp'] = strategy.data.index
                                 tsd = strategy.data['timestamp'].iloc[-1]
@@ -195,7 +202,27 @@ if __name__ == "__main__":
                                 """
                                 # strategy.run_strategy_torch() #! mangles the buy_condition values
 
-                                strategy, trade_counter = strategy.backtest(sentiment_metadata_ary)  # updates strategy.trades[] with appended trades
+                                rs = strategy.backtest(sentiment_metadata_ary)  # updates strategy.trades[] with appended trades
+                                # print(rs)
+                                # exit()
+                                strategy = rs['strategy']
+                                capital = rs['capital']
+                                trade_counter = rs['trade_counter']
+                                if 'positions' in rs:
+                                    positions = rs['positions']
+                                else:
+                                    positions = 0
+
+                                # if positions == 1 and last_positions == 0:
+                                #         print(fg.RED + "BUY"+fg.RESET)
+                                # if positions == 0 and last_positions == 1:
+                                #         print(fg.GREEN + "SEL"+fg.RESET )
+                                # last_positions = positions
+
+
+                                if strategy is None:
+                                    break
+
 
                                 #! check here for an existing exit_date, and break if it doesn;t exist
                                 if 'exit_date' in strategy.trades.columns and not strategy.trades.empty:
@@ -212,7 +239,7 @@ if __name__ == "__main__":
                                 else:
                                     # Either 'exit_date' does not exist or there are no trades
                                     # Handle accordingly, e.g., continue or break
-                                    print(f"No trades OR exit_date: {strategy.trades}")
+                                    # print(f"No trades OR exit_date: {strategy.trades}")
                                     break
 
                                 """
@@ -238,17 +265,18 @@ if __name__ == "__main__":
                                     #     print(f"{trade_counter} trades")
 
                                     try:
-                                        t.status_line(
-                                            sentiment=sentiment,
-                                            trade_counter=trade_counter,
-                                            rolling_window_position=rolling_window_position,
-                                            negCounter=negCounter,
-                                            limCounter=limCounter,
-                                            conCounter=conCounter,
-                                            lookCounter=lookCounter,
-                                            limitCounter=line_counter,
-                                            enter_date=str(strategy.trades['entry_date'].iloc[-1]),
-                                        )
+                                        # this status line in mainly to evaluate/view the NLC values, so not needed to live mode
+                                        # t.status_line(
+                                        #     sentiment=sentiment,
+                                        #     trade_counter=trade_counter,
+                                        #     rolling_window_position=rolling_window_position,
+                                        #     negCounter=negCounter,
+                                        #     limCounter=limCounter,
+                                        #     conCounter=conCounter,
+                                        #     lookCounter=lookCounter,
+                                        #     limitCounter=line_counter,
+                                        #     enter_date=str(strategy.trades['entry_date'].iloc[-1]),
+                                        # )
                                         last_trade_counter = trade_counter
 
                                         row = {
@@ -263,7 +291,7 @@ if __name__ == "__main__":
                                             # 'K': lookCounter,
                                             'trx_ret': strategy.trades['trx_return'].iloc[-1],
                                             'oh_ret': strategy.trades['trx_overhodl'].iloc[-1],
-                                            # 'entry_sentiment': strategy.trades['entry_sentiment'].iloc[-1],
+                                            'entry_sentiment': strategy.trades['entry_sentiment'].iloc[-1],
                                             # 'exit_sentiment': strategy.trades['exit_sentiment'].iloc[-1],
 
                                             # 'cum_trx': 0.0, #strategy.trades['cum_trx'].iloc[-1],
@@ -280,7 +308,7 @@ if __name__ == "__main__":
                                             # 'average_lower_wick': sentiment_metadata_ary['average_lower_wick'],
                                             # 'volatility': sentiment_metadata_ary['volatility'],
                                         }
-                                        rdf = append_dict_to_df(rdf, row)
+                                        rdf = t.append_dict_to_df(rdf, row)
                                     except Exception as e:
                                         print(f"Error in status_line: {e}")
                                         traceback.print_exc()
@@ -296,46 +324,53 @@ if __name__ == "__main__":
     except BreakoutException as e:
         pass
 
+
+    # t.xprint("x",mtype_counter,pp=True)
     # rdf['cum_trx'] = 1 + rdf['trx_ret']
     # rdf['cum_trx_growth'] = 1 + rdf['cum_trx'].cumprod()
     # rdf['cum_trx_pct'] = 1 + rdf['oh_ret']-1    rdf['cum_trx_pct'] = (1 + rdf['trx_ret']).cumprod() - 1
 
-    rdf['cum_oh_pct'] = (1 + rdf['oh_ret']).cumprod() - 1  # calculate the cumulative return for overhodl
-    rdf['cum_trx_pct'] = (1 + rdf['trx_ret']).cumprod() - 1  # calculate the cumulative return for transactions
+    print("\n")
+    if rdf.empty:
+        print("No data to report")
+    else:
+        rdf['cum_oh_pct'] = (1 + rdf['oh_ret']).cumprod() - 1  # calculate the cumulative return for overhodl
+        rdf['cum_trx_pct'] = (1 + rdf['trx_ret']).cumprod() - 1  # calculate the cumulative return for transactions
 
-    rdf.to_excel(testvars_report_filename,index=False)
+        rdf.to_excel(testvars_report_filename,index=False)
 
-    xlsx_reporter = ExcelReporter(testvars_report_filename)
-    xlsx_reporter.load_or_create_workbook()
+        xlsx_reporter = ExcelReporter(testvars_report_filename)
+        xlsx_reporter.load_or_create_workbook()
 
-    xlsx_reporter.set_column_format("trx_ret", "0.00%")
-    xlsx_reporter.set_column_format("oh_ret", "0.00%")
-    xlsx_reporter.set_column_format("entry_price", "$0")
-    xlsx_reporter.set_column_format("exit_price", "$0")
+        xlsx_reporter.set_column_format("trx_ret", "0.00%")
+        xlsx_reporter.set_column_format("oh_ret", "0.00%")
+        xlsx_reporter.set_column_format("entry_price", "$0")
+        xlsx_reporter.set_column_format("exit_price", "$0")
+        xlsx_reporter.set_column_format("entry_sentiment", "0")
 
-    # xlsx_reporter.set_column_format("cum_trx", "0.00%")
-    # xlsx_reporter.set_column_format("cum_oh", "0.00%")
+        # xlsx_reporter.set_column_format("cum_trx", "0.00%")
+        # xlsx_reporter.set_column_format("cum_oh", "0.00%")
 
-    xlsx_reporter.set_column_format("cum_trx_pct", "0.00%")
-    xlsx_reporter.set_column_format("cum_oh_pct", "0.00%")
+        xlsx_reporter.set_column_format("cum_trx_pct", "0.00%")
+        xlsx_reporter.set_column_format("cum_oh_pct", "0.00%")
 
 
-    # xlsx_reporter.set_column_format("price_change", "0.00%")
-    # xlsx_reporter.set_column_format("volatility", "0.0000")
-    # xlsx_reporter.set_column_format("average_body_size", "0.0000")
-    # xlsx_reporter.set_column_format("average_upper_wick", "0.0000")
-    # xlsx_reporter.set_column_format("average_lower_wick", "0.0000")
-    # xlsx_reporter.set_column_format("trend", "0.000")
+        # xlsx_reporter.set_column_format("price_change", "0.00%")
+        # xlsx_reporter.set_column_format("volatility", "0.0000")
+        # xlsx_reporter.set_column_format("average_body_size", "0.0000")
+        # xlsx_reporter.set_column_format("average_upper_wick", "0.0000")
+        # xlsx_reporter.set_column_format("average_lower_wick", "0.0000")
+        # xlsx_reporter.set_column_format("trend", "0.000")
 
-    xlsx_reporter.adjust_column_width()
-    xlsx_reporter.add_table()
-    xlsx_reporter.save()
+        xlsx_reporter.adjust_column_width()
+        xlsx_reporter.add_table()
+        xlsx_reporter.save()
 
-    # add additional columns here
-    # add a normalized value (to the cum_overhodl column) for closing price so as to compare on the chart
-    # xlsx_reporter.add_norm_close_column(testvars_report_filename)
+        # add additional columns here
+        # add a normalized value (to the cum_overhodl column) for closing price so as to compare on the chart
+        # xlsx_reporter.add_norm_close_column(testvars_report_filename)
 
-    print(f"Results have been written to {testvars_report_filename} [{line_counter}]")
-    exit()
+        print(f"Results have been written to {testvars_report_filename} [{line_counter}]")
+        exit()
 
 

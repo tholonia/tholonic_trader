@@ -34,8 +34,11 @@ from GlobalsClass import (
     positions,
     trades_list,
     trade_counter,
-    cum_return,
-    cum_overhodl
+    cum_return_pct,
+    cum_overhodl,
+    running_trx_return_pct,
+    running_trx_overhodl_pct,
+    capital
 )
 
 
@@ -60,7 +63,9 @@ class TholonicStrategy:
         self.contribution_threshold = kwargs.get('contribution_threshold',config['cfg']['conRange'][0])
         self.stop_loss_percentage   = kwargs.get('stop_loss_percentage',  config['cfg']['stop_loss_percentage'])
         self.commission_rate        = kwargs.get('commission_rate',       config['cfg']['commission_rate'])
+        self.capital                = kwargs.get('capital',              config['cfg']['initial_capital'])
         self.data = pd.DataFrame(ohlc_data)
+
 
         # Define columns and their data types
         # columns_and_dtypes = {
@@ -236,8 +241,12 @@ class TholonicStrategy:
         global last_buy_price_list
         global trades_list
         global trade_counter
-        global cum_return
+        global cum_return_pct
         global cum_overhodl
+        global running_trx_return_pct
+        global running_trx_overhodl_pct
+        # global capital
+
 
 
         # Get the last index from the data
@@ -290,7 +299,9 @@ class TholonicStrategy:
             trades_list.append(trade_entry)
             last_buy_date_list.append(last_i) # keep a record of the date of the last buy date
             last_buy_price_list.append(last_close) # keep a record of the price of the last buy_price
-            # print(fg.RED+f"{positions}\t\t\t\tBUY\t\tBUY last_close: {last_close:+3.4f}"+fg.RESET)
+
+            str_entry_price = f"${trades_list[-1]['entry_price']:7.2f}"
+            print(f"{last_i} "+fg.RED+f"BUY @ {str_entry_price}"+fg.RESET, end=" ")
 
         #~┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
         #~┃ Test for SELL                                                           ┃
@@ -300,17 +311,21 @@ class TholonicStrategy:
             and len(trades_list) > 0
             and positions == 1
             and isSell
+            and last_close != last_buy_price_list[-1]
             # and last_i > last_buy_date_list[-1] # Ensures sell does not occur on the same timestamp as the last buy
         )
+        # t.xprint("zd",trades_list)
+        # print(trades_list)
+        if len(trades_list) == 0:
+            return {'strategy': self, 'trade_counter': trade_counter, 'positions': positions, 'capital': self.capital}
 
         entry_price = trades_list[-1]['entry_price']
 
-        trx_return =  (last_close - entry_price) / entry_price
-        # print(fg.GREEN+f"{positions}\t\t\t\ttrx_return: {trx_return:+3.4f} entry_price: {entry_price:+3.4f} last_close: {last_close:+3.4f}"+fg.RESET)
+        trx_return_pct =  (last_close - entry_price) / entry_price
         # first check the stop-loss, and if it's triggered, sell at stop-loss price
         if (True
             and positions == 1
-            and trx_return < -(self.stop_loss_percentage/100)
+            and trx_return_pct < -(self.stop_loss_percentage/100)
             ):
                 last_close = last_buy_price_list[-1] * (1 - self.stop_loss_percentage/100)
                 doSell = True
@@ -321,32 +336,86 @@ class TholonicStrategy:
 
             # make performance calculations
 
-            buy_and_hold_return =   (last_close - first_close) / first_close
-            trx_overhodl = trx_return - buy_and_hold_return
-            cum_return   +=  trx_return
-            cum_overhodl +=  trx_overhodl
+            buy_and_hold_return_pct =   (last_close - first_close) / first_close
+            trx_overhodl_pct = trx_return_pct - buy_and_hold_return_pct
+            cum_return_pct   +=  trx_return_pct
+            cum_overhodl +=  trx_overhodl_pct
 
             # Record the sell order
             trade_exit = {
                 'exit_date': last_i, #! <class 'pandas._libs.tslibs.timestamps.Timestamp'>
                 'exit_price': last_close,
                 'exit_sentiment': sentiment,
-                'buy_and_hold_return': buy_and_hold_return,
-                'trx_return':  trx_return * (1-self.commission_rate),
-                'trx_overhodl': trx_overhodl,
-                'cum_return': cum_return,
+                'buy_and_hold_return': buy_and_hold_return_pct,
+                'trx_return':  trx_return_pct * (1-self.commission_rate),
+                'trx_overhodl': trx_overhodl_pct,
+                'cum_return': cum_return_pct,
                 'cum_overhodl': cum_overhodl
             }
 
             # update dict in list
             trade_counter += 1
-            trades_list[-1].update(trade_exit)
             last_sell_date_list.append(last_i)
+            trades_list[-1].update(trade_exit)
+
+
+
+            def clrindicate(str):
+                if '-' in str:
+                    return bg.RED+fg.BLACK+str+fg.RESET+bg.RESET
+                else:
+                    return fg.GREEN+str+fg.RESET
+            # BUY Sell Price
+            sell_price = clrindicate(f"${trades_list[-1]['exit_price']:07.2f}")
+            # Percent of transaction gain on last buy/sell cycles
+            trx_gain_in_pct = clrindicate(f"${trades_list[-1]['trx_return']*100:+07.2f}%")
+            # Percent of transaction gain againt boy-and-hodl
+            hodl_gain_in_pct = clrindicate(f"{trades_list[-1]['trx_overhodl']*100:+3.3f}%")
+
+            # # Cummulative tranaction gain in percentages
+            running_trx_return_pct.append(trx_return_pct)
+            rtrsum = sum(running_trx_return_pct)
+            cumm_transaction_gain_in_pct = clrindicate(f"${rtrsum*100:7.2f}%")
+
+            running_trx_overhodl_pct.append(trx_overhodl_pct)
+            rtosum = sum(running_trx_overhodl_pct)
+            cumm_transaction_overhodl_in_pct = clrindicate(f"{rtosum*100:7.2f}%")
+
+
+
+            self.capital = self.capital * (1 + trades_list[-1]['trx_return'])
+            new_capital = clrindicate(f"${self.capital:10.2f}")
+
+            # {trades_list[-1]['trx_overhodl']*100:+3.2f}%"+fg.RESET)
+
+            pstr = fg.GREEN
+            pstr += f" {fg.WHITE}{last_sell_date_list[-1]}{fg.RESET}"
+            pstr += " SEL "
+            pstr += f" {sell_price:>10s}"
+            pstr += f" {trx_gain_in_pct:>10s}"
+            pstr += f" {hodl_gain_in_pct:>10s}"
+            pstr += f" {cumm_transaction_gain_in_pct:>10s}"
+            pstr += f" {cumm_transaction_overhodl_in_pct:>10s}"
+            pstr += f" {new_capital:>10s}"
+            # pstr += f" RT:{str_running_trx_return_pct}"
+            # pstr += f" RO:{str_running_trx_overhodl_pct}"
+            pstr += fg.RESET
+            print(pstr)
+            # print(fg.GREEN+f"SEL @ {trades_list[-1]['entry_price']:+3.4f} {trades_list[-1]['exit_price']:+3.4f} {trades_list[-1]['exit_price']-trades_list[-1]['entry_price']:+3.4f} {trades_list[-1]['trx_return']*100:+3.3f}%  {trades_list[-1]['trx_overhodl']*100:+3.2f}%"+fg.RESET)
+
+            # print(f"{trades_list[-1]['entry_price']:+3.4f}  {trades_list[-1]['exit_price']}")
+
 
         # convert back the the nightmare that is dataframes
         self.trades = pd.DataFrame(trades_list)
 
-        return self, trade_counter
+        rsbt = {
+            'strategy':     self,
+            'trade_counter':trade_counter,
+            'positions':    positions,
+            'capital':      self.capital
+        }
+        return rsbt
 
 
 
